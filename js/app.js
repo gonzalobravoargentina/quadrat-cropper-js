@@ -267,13 +267,19 @@
   async function startQueue() {
     if (state.busy) return;
     state.busy = true;
-    var queue = state.items.filter(function (it) { return it.status === 'queued'; });
+    // Re-scan state.items on every step instead of iterating a snapshot:
+    // files dropped while a batch is running are pushed as 'queued' but
+    // startQueue() returns early (busy), so a snapshot loop left them
+    // queued forever. Re-scanning also stops cleanly after clearAll().
     var done = 0;
-    for (var i = 0; i < queue.length; i++) {
-      var it = queue[i];
+    for (;;) {
+      var pending = state.items.filter(function (q) { return q.status === 'queued'; });
+      if (!pending.length) break;
+      var it = pending[0];
+      var total = done + pending.length;
       it.status = 'processing';
       QDGrid.updateCard(it);
-      setProgress(true, 'Processing ' + (i + 1) + '/' + queue.length + ' — ' + it.name, i / queue.length);
+      setProgress(true, 'Processing ' + (done + 1) + '/' + total + ' — ' + it.name, done / total);
       try {
         await processOne(it);
       } catch (e) {
@@ -295,7 +301,6 @@
   // so the browser path and the Node/test path see identical detector
   // input (previously drawImage resampled to 1152 here with unknown
   // interpolation, diverging from the fixtures on borderline images).
-  var MAX_DETECT_MP = 24;   // safety cap for absurd sources (~96MB RGBA)
   async function decodeScaled(it) {
     var bmp = await createImageBitmap(it.blob, { imageOrientation: 'from-image' });
     var natW = bmp.width, natH = bmp.height;
@@ -429,7 +434,11 @@
   // ---------------------------------------------------------------- grid/ui
 
   function onThumbClick(item) {
-    if (!item.det || item.status !== 'done') return; // still scanning
+    // 'failed' items must open too: the card tooltip says "No frame found —
+    // click to fix corners manually" and the editor supports placing all four
+    // markers when there is no auto quad, but this guard used to return for
+    // them, so red "no frame" photos could never be fixed or exported.
+    if (!item.det || (item.status !== 'done' && item.status !== 'failed')) return; // still scanning
     // every item opens the review page: the full uncropped photo with the
     // crop's corner markers (draggable) and a live crop preview alongside
     QDEditor.open(item, function (quad) { reCropManual(item, quad); });
@@ -446,7 +455,8 @@
   function renderStats() {
     var n = QDGrid.updateStats(state.items);
     var ok = n.auto, review = n.review, manual = n.manual, failed = n.failed;
-    var total = ok + review + manual + failed;
+    var adjusted = n.adjusted || 0;
+    var total = ok + review + manual + failed + adjusted;
     if (!total) { ui.stats.hidden = true; ui.exportBtn.textContent = '⬇ Export ZIP'; return; }
     ui.stats.hidden = false;
     var ready = state.items.filter(isExportable).length;
@@ -455,6 +465,7 @@
       '<span><b>' + review + '</b> suggested review</span>' +
       '<span><b>' + manual + '</b> need manual corners</span>' +
       '<span><b>' + failed + '</b> no frame found</span>' +
+      (adjusted ? '<span><b>' + adjusted + '</b> manually adjusted</span>' : '') +
       '<span><b>' + total + '</b> total</span>' +
       '<span>· <b>' + ready + '</b> ready for export</span>';
     ui.exportBtn.textContent = '⬇ Export ZIP (' + ready + ')';

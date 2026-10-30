@@ -27,6 +27,7 @@
     UI.cropWrap = document.getElementById('cropPreviewWrap');
 
     document.getElementById('btnEditorClose').addEventListener('click', close);
+    UI.dialog.addEventListener('close', releaseSrc);
     document.getElementById('btnEditorApply').addEventListener('click', apply);
     document.getElementById('btnEditorReset').addEventListener('click', function () {
       state.quad = clonesQuad(autoQuadOf(state.item));
@@ -72,11 +73,22 @@
       state.imgURL = URL.createObjectURL(item.blob);
       state.urlFor = item.id;
       UI.img.src = state.imgURL;
+      UI.dialog.showModal();
+      return; // the img 'load' handler draws markers + preview
     }
+    // Same photo re-opened: no 'load' event fires, so redraw explicitly.
+    // Otherwise the overlay still shows the markers from the previous visit
+    // (e.g. moved, then closed without Apply) while state.quad was reset to
+    // the item's corners — the handles you see are not the ones you drag.
     UI.dialog.showModal();
+    resizeCanvas();
+    schedulePreview();
   }
 
   function close() { UI.dialog.close(); }
+  // release the cached full-resolution pixels whenever the dialog closes
+  // (Close button, Esc, or Apply)
+  function releaseSrc() { state.src = null; state.srcFor = null; }
 
   function fmtQuad(q) {
     return q.map(function (c) { return '(' + Math.round(c.x) + ',' + Math.round(c.y) + ')'; }).join(' ');
@@ -197,12 +209,19 @@
       { src: { x: 0, y: side }, dst: q[3] }
     ]);
     if (!Hm) return;
-    var cv = document.createElement('canvas');
-    cv.width = state.imgW; cv.height = state.imgH;
-    cv.getContext('2d').drawImage(UI.img, 0, 0);
-    var data = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
-    var warped = root.QuadratDetect.warpToSquare(
-      { width: cv.width, height: cv.height, data: data }, q, side);
+    // Decode the full-resolution pixels once per opened photo. Previously a
+    // full-size canvas + getImageData (~48 MB for a 12 MP TG-7 frame) was
+    // allocated on every debounced drag step, which made dragging stutter
+    // and churned memory on laptops/tablets used in the field.
+    if (!state.src || state.srcFor !== state.urlFor) {
+      var cv = document.createElement('canvas');
+      cv.width = state.imgW; cv.height = state.imgH;
+      cv.getContext('2d').drawImage(UI.img, 0, 0);
+      state.src = { width: cv.width, height: cv.height,
+                    data: cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data };
+      state.srcFor = state.urlFor;
+    }
+    var warped = root.QuadratDetect.warpToSquare(state.src, q, side);
     var outCv = document.createElement('canvas');
     outCv.width = side; outCv.height = side;
     var outData = new ImageData(new Uint8ClampedArray(warped.buffer), side, side);
@@ -220,6 +239,14 @@
 
   document.addEventListener('keydown', function (e) {
     if (!UI.dialog || !UI.dialog.open) return;
+    // The dialog's help text promises "Enter apply & re-crop", but no
+    // handler existed. Leave Enter alone on focused buttons so it keeps
+    // activating Close/Reset natively.
+    if (e.key === 'Enter' && !(e.target && e.target.tagName === 'BUTTON')) {
+      e.preventDefault();
+      apply();
+      return;
+    }
     if (e.key === 'r' || e.key === 'R') {
       state.quad = clonesQuad(autoQuadOf(state.item));
       draw(); schedulePreview();
