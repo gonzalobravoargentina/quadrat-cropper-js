@@ -187,13 +187,18 @@
         <p>Drag the four corner markers onto the <em>inner</em> corners of the
            PVC opening. The crop area updates live.</p>
         <p class="muted">Keys: <kbd>R</kbd> reset to auto-detected,
-           <kbd>Enter</kbd> apply &amp; re-crop, <kbd>Esc</kbd> close.</p>
+           <kbd>Enter</kbd> apply &amp; re-crop, <kbd>Esc</kbd> close,
+           <kbd>←</kbd> / <kbd>→</kbd> previous / next photo (moved markers
+           are applied before moving on).</p>
       </div>
       <div class="preview-wrap" id="cropPreviewWrap">
         <h3>Crop preview</h3>
         <canvas id="cropPreview" width="300" height="300"></canvas>
       </div>
       <div class="dialog-actions">
+        <button id="btnEditorPrev" type="button" title="Previous photo (←)" aria-label="Previous photo">◀</button>
+        <span id="editorPos" class="muted small"></span>
+        <button id="btnEditorNext" type="button" title="Next photo (→)" aria-label="Next photo">▶</button>
         <button id="btnEditorReset" type="button">Reset</button>
         <button id="btnEditorClose" type="button" class="secondary">Close</button>
         <button id="btnEditorApply" type="button" class="primary">Apply &amp; re-crop</button>

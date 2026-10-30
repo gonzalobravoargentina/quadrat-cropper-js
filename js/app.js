@@ -676,10 +676,41 @@
     if (!item.det || (item.status !== 'done' && item.status !== 'failed')) return; // still scanning
     // every item opens the review page: the full uncropped photo with the
     // crop's corner markers (draggable) and a live crop preview alongside
+    openEditorAt(item);
+  }
+
+  /** Photos the editor can show, in grid order (prev/next navigation). */
+  function editableItems() {
+    return state.items.filter(function (it) {
+      return it.det && (it.status === 'done' || it.status === 'failed');
+    });
+  }
+
+  function openEditorAt(item) {
+    var list = editableItems();
+    var idx = list.indexOf(item);
     ensureBlob(item).then(function () {
       QDEditor.open(item, function (quad) {
         reCropManual(item, quad).then(function () { releaseOriginal(item); });
+      }, {
+        pos: idx + 1,
+        total: list.length,
+        go: function (dir) {
+          var target = list[idx + dir];
+          if (!target) return;
+          // leaving an untouched Drive photo: drop its original again
+          if (item.source !== 'manual') releaseOriginal(item);
+          openEditorAt(target);
+        }
       });
+      // fetch the next photo's original in the background (Drive items are
+      // released after processing), so → shows it without a wait
+      var nxt = list[idx + 1];
+      if (nxt && !nxt.blob && nxt.origin === 'drive-api') {
+        QDDrive.downloadFile(nxt.driveId).then(function (b) {
+          return QDRaw.isRaw(nxt.name) ? QDRaw.toJpeg(b).then(function (r) { return r.blob; }) : b;
+        }).then(function (b) { if (!nxt.blob) nxt.blob = b; }, function () { /* fetched on demand */ });
+      }
     }, function (e) { alert('Could not load the original photo: ' + (e.message || e)); });
   }
 

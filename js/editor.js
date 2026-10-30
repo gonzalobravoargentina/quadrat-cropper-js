@@ -29,6 +29,11 @@
     document.getElementById('btnEditorClose').addEventListener('click', close);
     UI.dialog.addEventListener('close', releaseSrc);
     document.getElementById('btnEditorApply').addEventListener('click', apply);
+    UI.prev = document.getElementById('btnEditorPrev');
+    UI.next = document.getElementById('btnEditorNext');
+    UI.pos = document.getElementById('editorPos');
+    UI.prev.addEventListener('click', function () { navigate(-1); });
+    UI.next.addEventListener('click', function () { navigate(1); });
     document.getElementById('btnEditorReset').addEventListener('click', function () {
       state.quad = clonesQuad(autoQuadOf(state.item)) || defaultQuad();
       draw(); schedulePreview();
@@ -65,12 +70,38 @@
     if (b) b.focus();
   }
 
-  function open(item, appliedCb) {
+  /**
+   * Previous / next photo without leaving the editor. Markers that were moved
+   * are applied first (same as Apply), so a batch can be reviewed in one pass;
+   * untouched photos are left as they are. `nav` comes from app.js:
+   * { pos, total, go(dir) } — go() opens the neighbour in this same dialog.
+   */
+  function navigate(dir) {
+    var nav = state.nav;
+    if (!nav || !state.item) return;
+    var target = nav.pos - 1 + dir;
+    if (target < 0 || target >= nav.total) return;
+    // only markers the user actually dragged count as an edit: a "no frame"
+    // photo opens with a default square, and merely passing through it must
+    // not turn that square into a manual crop
+    if (state.touched && state.quad && state.appliedCb) state.appliedCb(clonesQuad(state.quad));
+    nav.go(dir);
+  }
+
+  function open(item, appliedCb, nav) {
     state.item = item;
     state.appliedCb = appliedCb;
+    state.nav = nav || null;
+    state.touched = false;
+    if (UI.pos) {
+      UI.pos.textContent = nav ? nav.pos + ' / ' + nav.total : '';
+      UI.prev.disabled = !nav || nav.pos <= 1;
+      UI.next.disabled = !nav || nav.pos >= nav.total;
+      UI.prev.hidden = UI.next.hidden = !nav;
+    }
     state.quad = clonesQuad(
       (item.corners && item.corners.length === 4) ? item.corners : autoQuadOf(item));
-    UI.title.textContent = 'Manual corner review — ' + item.name;
+    UI.title.textContent = 'Manual corner review — ' + item.name + (item.excluded ? ' (excluded)' : '');
     UI.info.textContent = [
       'Auto detection: ' + (item.ok ? Math.round(item.conf * 100) + '% confidence' : 'failed (' + (item.reason || 'no frame found') + ')'),
       autoQuadOf(item) ? 'Auto quad: ' + fmtQuad(autoQuadOf(item)) : 'No auto quad — place all four markers by dragging.',
@@ -82,7 +113,8 @@
       state.imgURL = URL.createObjectURL(item.blob);
       state.urlFor = item.id;
       UI.img.src = state.imgURL;
-      UI.dialog.showModal();
+      // showModal() throws on an already-open dialog (prev/next navigation)
+      if (!UI.dialog.open) UI.dialog.showModal();
       focusApply();
       return; // the img 'load' handler draws markers + preview
     }
@@ -92,7 +124,7 @@
     // the item's corners — the handles you see are not the ones you drag.
     if (!state.quad && state.imgW) state.quad = defaultQuad();
     if (state.imgW) clampQuad();
-    UI.dialog.showModal();
+    if (!UI.dialog.open) UI.dialog.showModal();
     focusApply();
     resizeCanvas();
     schedulePreview();
@@ -211,6 +243,7 @@
   function onMove(e) {
     if (state.dragging < 0) return;
     var p = evPos(e);
+    state.touched = true;
     state.quad[state.dragging] = {
       x: Math.max(0, Math.min(state.imgW - 1, p.x)),
       y: Math.max(0, Math.min(state.imgH - 1, p.y))
@@ -284,6 +317,11 @@
     if (e.key === 'r' || e.key === 'R') {
       state.quad = clonesQuad(autoQuadOf(state.item)) || defaultQuad();
       draw(); schedulePreview();
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      if (state.dragging >= 0) return;
+      e.preventDefault();
+      navigate(e.key === 'ArrowLeft' ? -1 : 1);
     }
   });
 

@@ -102,7 +102,9 @@ the crop's four corner markers and a live crop preview alongside. Drag the
 markers onto the inner corners of the PVC opening, then Apply (or press
 `Enter`; `R` resets to the auto-detected corners, `Esc` closes). This works
 the same for confident crops and for detections that need a fix — nothing is
-changed unless you move a marker.
+changed unless you move a marker. **◀ ▶ (or ← →)** move to the previous /
+next photo without leaving the editor; markers you dragged are applied before
+moving on, so a whole batch can be reviewed in one pass.
 
 **⬇ Export ZIP** — there is nothing to tick: every crop with **confidence ≥ 0.80**
 is included automatically, plus every one you adjusted manually, minus the
