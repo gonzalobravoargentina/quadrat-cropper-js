@@ -150,6 +150,12 @@ names ALTO/MEDIO/BAJO (or HIGH/MID/LOW…) become HIGHTIDE/MIDTIDE/LOWTIDE.
 monitored (seeded from the 2026 campaign), and the app learns new localities
 — including the photographer — as you type them.
 
+**Azores workshop (CoralNet)** preset — the MBON + AIR Centre workshop
+layout: the five Aux fields are `Group, country, locality, site, strata`
+(no `state`); defaults PORTUGAL / ILHA TERCEIRA, `Comments` = *Azores Workshop
+2026*, `Photographer` = the group when left empty, no framing gear; a folder
+per group or transect (*Group_1*, *Grupo 2*, *Transect_3*…) fills `Group`.
+
 The ZIP then names each crop `YYYYMMDD_` + the source photo name (the
 date from EXIF; names that already start with a date are left alone — or
 choose *as the source photo*), adds **`metadata_coralnet.csv`** in CoralNet's upload

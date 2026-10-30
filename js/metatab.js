@@ -52,7 +52,7 @@
       fixed: { 'Height (cm)': '42', Strobes: 'no', 'Framing gear used': '25x25cm' },
       // filled per group (folder); upper: stored upper-case like the P2P data
       fields: [
-        { key: 'country', upper: true, required: true },
+        { key: 'country', upper: true, required: true, remember: true },
         { key: 'state', upper: true, required: true },
         { key: 'locality', upper: true, required: true },
         { key: 'site', upper: true, required: true },
@@ -64,7 +64,37 @@
         { key: 'White balance card' },
         // not a CoralNet column: kept in each crop's EXIF and in manifest.csv
         { key: 'season', options: SEASONS, extra: true }
-      ]
+      ],
+      guess: function (k) { return folderGuess(k); }
+    },
+
+    // MBON + AIR Centre workshop, Terceira (Azores). Same CoralNet layout
+    // but the five Aux fields are Group, country, locality, site, strata
+    // (no state); Photographer is the group; Comments names the workshop;
+    // no framing gear recorded. From the workshop's metadata.csv (Oct 2026).
+    azores: {
+      label: 'Azores workshop (CoralNet)',
+      csvName: 'metadata_coralnet.csv',
+      columns: ['Name', 'Date', 'Group', 'country', 'locality', 'site', 'strata', 'Height (cm)',
+        'Latitude', 'Longitude', 'Depth', 'Camera', 'Photographer', 'Water quality', 'Strobes',
+        'Framing gear used', 'White balance card', 'Comments'],
+      auto: { Name: 'file name of the crop', Date: 'EXIF date', Latitude: 'EXIF GPS',
+              Longitude: 'EXIF GPS', Camera: 'EXIF camera model' },
+      fixed: { 'Height (cm)': '42', Strobes: 'no' },
+      fields: [
+        { key: 'Group', required: true, hint: 'Group_1' },
+        { key: 'country', upper: true, required: true, default: 'PORTUGAL' },
+        { key: 'locality', upper: true, required: true, default: 'ILHA TERCEIRA' },
+        { key: 'site', upper: true, required: true, hint: 'e.g. NEGRITO', remember: true },
+        { key: 'strata', options: STRATA, required: true },
+        { key: 'Photographer', copyFrom: 'Group', hint: 'empty = Group' },
+        { key: 'Comments', default: 'Azores Workshop 2026' },
+        { key: 'Framing gear used' },
+        { key: 'Depth' },
+        { key: 'Water quality' },
+        { key: 'White balance card' }
+      ],
+      guess: function (k) { return azoresGuess(k); }
     }
   };
 
@@ -168,14 +198,36 @@
     if (!st.groups[groupKey]) {
       var v = {}, p = preset();
       if (p) {
-        var guess = folderGuess(groupKey);
+        var guess = p.guess ? p.guess(groupKey) : {};
         p.fields.forEach(function (f) {
-          v[f.key] = guess[f.key] || (f.key === 'country' ? (st.last.country || '') : '');
+          v[f.key] = guess[f.key] || f.default || (f.remember ? (st.last[f.key] || '') : '');
         });
       }
       st.groups[groupKey] = v;
     }
     return st.groups[groupKey];
+  }
+
+  /**
+   * Azores workshop folders: one folder per group / transect ("Group_1",
+   * "Grupo 2", "Transect_3"…) → Group = "Group_N"; a tide-level folder
+   * anywhere in the path → strata. Everything else comes from the defaults.
+   */
+  function azoresGuess(groupKey) {
+    var parts = String(groupKey).split('/').filter(Boolean), out = {};
+    for (var i = parts.length - 1; i >= 0; i--) {
+      var m = /(?:GROUP|GRUPO|GRUPPE|TRANSECT|TRANSECTA|TRANSECTO)[\s_-]*(\d+)/i.exec(parts[i]);
+      if (m && !out.Group) out.Group = 'Group_' + (+m[1]);
+      var sv = normStrata(parts[i]);
+      if (sv && !out.strata && !m) out.strata = sv;
+    }
+    return out;
+  }
+
+  /** Field value for a group, falling back to another field (Photographer ← Group). */
+  function fieldValue(p, g, key) {
+    var f = p.fields.filter(function (x) { return x.key === key; })[0];
+    return g[key] || (f && f.copyFrom ? (g[f.copyFrom] || '') : '');
   }
 
   /** Remember state / AMP / photographer per locality as the user types them. */
@@ -218,7 +270,7 @@
       Camera: (it.exif && it.exif.model) || ''
     };
     Object.keys(p.fixed).forEach(function (k) { vals[k] = p.fixed[k]; });
-    p.fields.forEach(function (f) { vals[f.key] = g[f.key] || ''; });
+    p.fields.forEach(function (f) { vals[f.key] = fieldValue(p, g, f.key); });
     return p.columns.map(function (c) { return vals[c] != null ? vals[c] : ''; });
   }
 
@@ -227,14 +279,14 @@
     var p = preset(), g = p ? valuesFor(groupOf(it)) : {};
     var desc = [];
     if (p) {
-      p.fields.forEach(function (f) { if (g[f.key]) desc.push(f.key + '=' + g[f.key]); });
+      p.fields.forEach(function (f) { var v = fieldValue(p, g, f.key); if (v) desc.push(f.key + '=' + v); });
       Object.keys(p.fixed).forEach(function (k) { desc.push(k + '=' + p.fixed[k]); });
     }
     return {
       make: it.exif && it.exif.make, model: it.exif && it.exif.model,
       dateTimeOriginal: exifDate(it),
       latitude: it.exif ? it.exif.latitude : null, longitude: it.exif ? it.exif.longitude : null,
-      artist: g.Photographer || '', description: desc.join('; ')
+      artist: (p && fieldValue(p, g, 'Photographer')) || '', description: desc.join('; ')
     };
   }
 
@@ -245,7 +297,7 @@
     items.forEach(function (it) {
       var k = groupOf(it); if (seen[k]) return; seen[k] = true;
       var v = valuesFor(k);
-      var miss = p.fields.filter(function (f) { return f.required && !v[f.key]; }).map(function (f) { return f.key; });
+      var miss = p.fields.filter(function (f) { return f.required && !fieldValue(p, v, f.key); }).map(function (f) { return f.key; });
       if (miss.length) out.push(k + ': ' + miss.join(', '));
     });
     return out;
@@ -351,6 +403,6 @@
 
   root.QDMetaTab = {
     init: init, render: render, exportInfo: exportInfo, groupOf: groupOf,
-    _folderGuess: folderGuess, _normStrata: normStrata, PRESETS: PRESETS
+    _folderGuess: folderGuess, _azoresGuess: azoresGuess, _normStrata: normStrata, PRESETS: PRESETS
   };
 })(typeof self !== 'undefined' ? self : this);
