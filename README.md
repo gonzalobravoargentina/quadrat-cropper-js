@@ -1,7 +1,9 @@
 # Quadrat Cropper (JS)
 
 Browser-based tool that automatically crops photoquadrat images to the square
-interior area framed by the PVC quadrat (mint-green or yellow, 25 × 25 cm). Supports
+interior area framed by the PVC quadrat (mint-green or yellow, 25 × 25 cm;
+the mint tube is also found when the camera renders it turquoise/cyan, as the
+Olympus/OM TG-6/TG-7 does). Supports
 individual files, drag & drop batches, and Google Drive (Picker or a pasted
 folder link). Low-confidence detections are flagged for manual review with
 draggable corner markers, and everything exports as a ZIP of square crops plus
@@ -89,7 +91,7 @@ rigidly mounted on the frame, so the opening is a square in the image. The
 detected corners are replaced by their best-fit square (least squares), and
 that square is shrunk by an **inset (default 5 %)** so the PVC rim stays out
 of the crop — change it in **⚙** (0–20 %). A photo is flagged for review when
-the detected outline was clearly not square (> 4 % → amber, > 12 % → red),
+the detected outline was clearly not square (> 6 % → amber, > 12 % → red),
 when the square had to be moved/shrunk to stay inside the photo, or when its
 size differs from the typical size in the batch (outside 0.8–1.25×).
 

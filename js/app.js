@@ -592,7 +592,11 @@
   // ------------------------------------------------- square-crop geometry
 
   // Tolerances for the recommended crop (fractions of the square's side).
-  var SQUARE_TOL_REVIEW = 0.04;   // > 4 % corner shift → "suggested review"
+  // TG-6/TG-7 field photos show the opening ~5 % wider than tall (camera /
+  // mount geometry, measured on 2026 photos: residual 2-4.4 % on good
+  // detections), so 4 % flagged normal photos; 6 % still catches a tilted
+  // camera (15 % stretch → 6.4 %).
+  var SQUARE_TOL_REVIEW = 0.06;   // > 6 % corner shift → "suggested review"
   var SQUARE_TOL_MANUAL = 0.12;   // > 12 % → "needs manual corners"
   var SIZE_TOL = [0.8, 1.25];     // side vs batch-typical side
   var SIZE_MIN_SAMPLES = 5;       // clean detections needed to know "typical"

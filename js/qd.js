@@ -39,7 +39,7 @@
   // Detector version — bumped when qd.js or its calling contract changes.
   // app.js surfaces this in the page title / header so users can confirm
   // they are running a fresh build (not a cached one).
-  var VERSION = '1.9.1';
+  var VERSION = '1.10.0';
 
   var DEFAULTS = {
     workWidth: 1152,
@@ -101,6 +101,18 @@
       // the structural scoring (RANSAC + opening probes) prunes instead.
       hueMin: 42, hueMax: 82, satMin: 0.20, valMin: 0.35,
       highlightHueMin: 25, highlightHueMax: 95,
+    },
+    // Same mint PVC as seen by the Olympus/OM TG-6/TG-7 (the P2P protocol
+    // camera): its rendering puts the tube at hue ~165-185 in air and ~180-
+    // 205 underwater (turquoise / pale cyan), vs ~140-150 on the Panasonic G8
+    // the mint band was tuned on. Measured on field photos (2026): only
+    // 3-69 % of tube pixels fell inside the mint band and those photos
+    // failed. Run only when mint/yellow found nothing confident, so photos
+    // that already work keep their result and their speed.
+    cyan: {
+      color: 'cyan',
+      hueMin: 158, hueMax: 205, satMin: 0.13, valMin: 0.30,
+      highlightHueMin: 140, highlightHueMax: 220,
     },
   };
 
@@ -674,7 +686,7 @@
     var scaled = scale < 1 ? boxScale(image, Math.round(srcW * scale), Math.round(srcH * scale))
                            : { width: image.width, height: image.height, data: image.data };
 
-    var names = ['mint', 'yellow'];
+    var names = ['mint', 'yellow', 'cyan'];
     if (options && FRAME_COLORS[options.color]) names = [options.color];
     else if (options && (options.hueMin !== undefined || options.satMin !== undefined || options.valMin !== undefined)) {
       names = ['custom']; // caller pinned an explicit band — single pass
@@ -692,6 +704,8 @@
     var smoothR = scale < (opts.maskSmoothBelow || 0.5) ? (opts.maskSmooth || 0) : 0;
     for (var pi = 0; pi < names.length; pi++) {
       var nm = names[pi];
+      // fallback pass: skip it when an earlier color is already confident
+      if (nm === 'cyan' && bestConf >= 0.8) continue;
       var passOpts = (nm === 'custom')
         ? Object.assign({}, opts, { color: 'custom' })
         : Object.assign({}, opts, FRAME_COLORS[nm]);
