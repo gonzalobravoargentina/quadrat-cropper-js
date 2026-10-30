@@ -134,13 +134,21 @@ column). With the **Intertidal — MBON Pole to Pole (CoralNet)** preset:
   `Framing gear used` = 25x25cm;
 - per group: `country`, `state`, `locality`, `site`, `strata`
   (HIGHTIDE / MIDTIDE / LOWTIDE), `Photographer`, `Comments` (e.g. AMP code),
-  `Depth`, `Water quality`, `White balance card`. Folder names pre-fill
-  `state / locality / site / strata` (a folder like *LOWTIDE*, *bajo* or
-  *low* is read as the strata); country and photographer default to the last
-  values used.
+  `Depth`, `Water quality`, `White balance card`, plus `season` (FRIO /
+  CALIDO; kept in EXIF and the manifest, not a CoralNet column).
 
-The ZIP then names each crop like its source photo (optionally
-`YYYYMMDD_` + name), adds **`metadata_coralnet.csv`** in CoralNet's upload
+Folder names pre-fill the group. The field team's Drive layout is
+`COUNTRY/YEAR/SEASON/LOCALITY/SITE/STRATA/photo`, e.g.
+`ARGENTINA/2026/FRIO/CABO DOS BAHIAS/ENTRE CALETAS/ALTO/AMP55261.JPG`; it is
+read from the deepest folder up, so links to a lower folder work too. Strata
+names ALTO/MEDIO/BAJO (or HIGH/MID/LOW…) become HIGHTIDE/MIDTIDE/LOWTIDE.
+`state` and `Comments` (AMP code) come from a table of the localities already
+monitored (seeded from the 2026 campaign), and the app learns new localities
+— including the photographer — as you type them.
+
+The ZIP then names each crop `YYYYMMDD_` + the source photo name (the
+date from EXIF; names that already start with a date are left alone — or
+choose *as the source photo*), adds **`metadata_coralnet.csv`** in CoralNet's upload
 format (columns `Name, Date, country, state, locality, site, strata,
 Height (cm), Latitude, Longitude, Depth, Camera, Photographer, Water quality,
 Strobes, Framing gear used, White balance card, Comments`) and embeds the same

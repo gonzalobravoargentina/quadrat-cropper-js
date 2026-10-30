@@ -17,6 +17,26 @@
   'use strict';
 
   var STRATA = ['HIGHTIDE', 'MIDTIDE', 'LOWTIDE'];
+  var SEASONS = ['FRIO', 'CALIDO'];
+
+  // Localities already monitored: state + AMP code (Comments), from the
+  // team's 2026 metadata.csv (6670 photos; one state/AMP per locality). New
+  // ones are learned as they are typed in the Metadata tab (this browser).
+  var KNOWN_LOCALITIES = {
+    'CABO DOS BAHIAS': { state: 'CHUBUT', Comments: 'AMP5' },
+    'ISLOTE LOBOS': { state: 'RIO NEGRO', Comments: 'AMP3' },
+    'MAKENKE': { state: 'SANTA CRUZ', Comments: 'AMP8' },
+    'MONTE LEON': { state: 'SANTA CRUZ', Comments: 'AMP8' },
+    'PIMCPA': { state: 'CHUBUT', Comments: 'AMP5' },
+    'PIMCPA_ISLA TOVA': { state: 'CHUBUT', Comments: 'AMP5' },
+    'PLAYA LARGA': { state: 'TIERRA DEL FUEGO', Comments: 'AMP12' },
+    'PNTDF': { state: 'TIERRA DEL FUEGO', Comments: 'AMP12' },
+    'PUNTA BS AS': { state: 'CHUBUT', Comments: 'AMP22' },
+    'PUNTA BUQUE': { state: 'CHUBUT', Comments: 'AMP7' },
+    'PUNTA LOMA': { state: 'CHUBUT', Comments: 'AMP1' },
+    'RESERVA COSTA ATLANTICA': { state: 'TIERRA DEL FUEGO', Comments: 'AMP11' }
+  };
+  var COUNTRIES = /^(ARGENTINA|CHILE|URUGUAY|BRASIL|BRAZIL|PERU|ECUADOR|COLOMBIA|VENEZUELA|PANAMA|COSTA RICA|MEXICO|USA|ESTADOS UNIDOS|UNITED STATES|CANADA|PORTUGAL|ESPANA|SPAIN|AZORES|ACORES)$/;
 
   var PRESETS = {
     intertidal: {
@@ -41,17 +61,20 @@
         { key: 'Comments', hint: 'e.g. AMP12' },
         { key: 'Depth' },
         { key: 'Water quality' },
-        { key: 'White balance card' }
+        { key: 'White balance card' },
+        // not a CoralNet column: kept in each crop's EXIF and in manifest.csv
+        { key: 'season', options: SEASONS, extra: true }
       ]
     }
   };
 
-  var LS = 'quadrat.meta.v1';
+  var LS = 'quadrat.meta.v2';
   var st = {
-    preset: 'intertidal',   // or 'none'
-    nameFormat: 'source',   // 'source' | 'dateprefix'
-    groups: {},             // groupKey -> { field: value }
-    last: {}                // last value typed per field (default for new groups)
+    preset: 'intertidal',     // or 'none'
+    nameFormat: 'dateprefix', // 'dateprefix' (YYYYMMDD_ + source) | 'source'
+    groups: {},               // groupKey -> { field: value }
+    last: {},                 // last value typed per field (country default)
+    known: {}                 // locality -> { state, Comments, Photographer } learned here
   };
   var ui = {}, getItems = function () { return []; };
 
@@ -61,10 +84,11 @@
       if (s.preset) st.preset = s.preset;
       if (s.nameFormat) st.nameFormat = s.nameFormat;
       st.last = s.last || {};
+      st.known = s.known || {};
     } catch (e) { /* private mode */ }
   }
   function save() {
-    try { localStorage.setItem(LS, JSON.stringify({ preset: st.preset, nameFormat: st.nameFormat, last: st.last })); } catch (e) { /* private mode */ }
+    try { localStorage.setItem(LS, JSON.stringify({ preset: st.preset, nameFormat: st.nameFormat, last: st.last, known: st.known })); } catch (e) { /* private mode */ }
   }
 
   function preset() { return PRESETS[st.preset] || null; }
@@ -93,21 +117,50 @@
     return '';
   }
 
+  function normKey(v) {
+    return String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+  }
+  function normSeason(v) {
+    var s = normKey(v);
+    if (/^(FRI[OA]|INVIERNO|OTONO|COLD|WINTER|AUTUMN|FALL)$/.test(s)) return 'FRIO';
+    if (/^(CALID[OA]|VERANO|PRIMAVERA|WARM|SUMMER|SPRING)$/.test(s)) return 'CALIDO';
+    return '';
+  }
+
   /**
-   * Guess fields from the folder path (deepest folder first): a level that
-   * reads as a tide level fills `strata`, the levels above it fill site,
-   * locality and state. Only empty fields are filled; the user can edit.
-   * (Tuned to the field team's Drive layout once we have a real example.)
+   * Read fields from the folder path. Layout used by the P2P team:
+   *   COUNTRY / YEAR / SEASON / LOCALITY / SITE / STRATA / photo
+   *   e.g. ARGENTINA/2026/FRIO/CABO DOS BAHIAS/ENTRE CALETAS/ALTO/AMP55261.JPG
+   * Parsed from the deepest folder up, so it also works when the link points
+   * lower in the tree (e.g. at a locality): strata (ALTO/MEDIO/BAJO,
+   * HIGH/MID/LOW …), then site, then locality; a 4-digit year and a season
+   * (FRIO/CALIDO …) are recognised above them, and the country is the folder
+   * above the year (or any folder that is a known country name). state and
+   * Comments (AMP code) come from the locality table. Only empty fields are
+   * ever filled; everything stays editable.
    */
   function folderGuess(groupKey) {
-    var parts = String(groupKey).split('/').map(function (s) { return s.trim(); }).filter(Boolean);
+    var parts = String(groupKey).split('/').map(function (x) { return x.trim(); }).filter(Boolean);
     if (!parts.length || groupKey === 'Ungrouped' || /^Load \d+$/.test(groupKey)) return {};
     var out = {}, i = parts.length - 1;
     var sv = normStrata(parts[i]);
     if (sv) { out.strata = sv; i--; }
-    ['site', 'locality', 'state'].forEach(function (k) {
-      if (i >= 0) { out[k] = parts[i].toUpperCase(); i--; }
-    });
+    var named = [];
+    for (var k = i; k >= 0; k--) {
+      var seg = parts[k], key = normKey(seg);
+      if (/^(19|20)\d{2}$/.test(key)) {             // year: the folder above is the country
+        if (k > 0) out.country = normKey(parts[k - 1]);
+        break;
+      }
+      if (normSeason(seg)) { out.season = out.season || normSeason(seg); continue; }
+      if (COUNTRIES.test(key)) { out.country = key; break; }
+      named.push(seg.toUpperCase());
+    }
+    if (named[0]) out.site = named[0];
+    if (named[1]) out.locality = named[1];
+    var lk = out.locality && normKey(out.locality);
+    var loc = lk && Object.assign({}, KNOWN_LOCALITIES[lk] || {}, st.known[lk] || {});
+    if (loc) Object.keys(loc).forEach(function (f) { if (loc[f] && !out[f]) out[f] = loc[f]; });
     return out;
   }
 
@@ -117,12 +170,21 @@
       if (p) {
         var guess = folderGuess(groupKey);
         p.fields.forEach(function (f) {
-          v[f.key] = guess[f.key] || (f.key === 'country' || f.key === 'Photographer' ? (st.last[f.key] || '') : '');
+          v[f.key] = guess[f.key] || (f.key === 'country' ? (st.last.country || '') : '');
         });
       }
       st.groups[groupKey] = v;
     }
     return st.groups[groupKey];
+  }
+
+  /** Remember state / AMP / photographer per locality as the user types them. */
+  function learn(groupKey) {
+    var v = st.groups[groupKey];
+    if (!v || !v.locality) return;
+    var k = normKey(v.locality), rec = st.known[k] || {};
+    ['state', 'Comments', 'Photographer'].forEach(function (f) { if (v[f]) rec[f] = v[f]; });
+    st.known[k] = rec;
   }
 
   // ------------------------------------------------------------- export API
@@ -252,6 +314,7 @@
     if (f && f.upper) { v = v.toUpperCase(); if (t.value !== v) { var pos = t.selectionStart; t.value = v; try { t.setSelectionRange(pos, pos); } catch (er) { /* select */ } } }
     valuesFor(g)[k] = v.trim();
     st.last[k] = v.trim();
+    learn(g);
     save();
     t.classList.toggle('missing', !!(f && f.required && !v.trim()));
     if (ui.onChange) ui.onChange();
