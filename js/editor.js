@@ -29,6 +29,13 @@
     document.getElementById('btnEditorClose').addEventListener('click', close);
     UI.dialog.addEventListener('close', releaseSrc);
     document.getElementById('btnEditorApply').addEventListener('click', apply);
+    UI.lockSq = document.getElementById('editorLockSquare');
+    if (UI.lockSq) {
+      try { UI.lockSq.checked = localStorage.getItem('quadrat.lockSquare') !== '0'; } catch (e) { /* private mode */ }
+      UI.lockSq.addEventListener('change', function () {
+        try { localStorage.setItem('quadrat.lockSquare', UI.lockSq.checked ? '1' : '0'); } catch (e) { /* private mode */ }
+      });
+    }
     UI.prev = document.getElementById('btnEditorPrev');
     UI.next = document.getElementById('btnEditorNext');
     UI.pos = document.getElementById('editorPos');
@@ -226,6 +233,40 @@
     });
   }
 
+  // ---- square lock -------------------------------------------------------
+  // The opening is a square, so by default a dragged corner can only resize /
+  // rotate the square: the OPPOSITE corner stays put and the other two are
+  // rebuilt from the diagonal. Dragging inside the square moves it whole.
+  // "Keep square" off = free corners (old behaviour).
+  function squareLocked() { return !UI.lockSq || UI.lockSq.checked; }
+
+  function inside(q) {
+    return q.every(function (c) { return c.x >= 0 && c.y >= 0 && c.x <= state.imgW - 1 && c.y <= state.imgH - 1; });
+  }
+
+  /** Square with corner i at P and the opposite corner fixed (TL,TR,BR,BL order kept). */
+  function squareFromDiagonal(q, i, P) {
+    var O = q[(i + 2) % 4];
+    var cx = (O.x + P.x) / 2, cy = (O.y + P.y) / 2;
+    var hx = P.x - cx, hy = P.y - cy;          // centre → dragged corner
+    var rx = -hy, ry = hx;                     // that vector turned 90° (next corner, clockwise on screen)
+    var out = [];
+    out[i] = { x: P.x, y: P.y };
+    out[(i + 1) % 4] = { x: cx + rx, y: cy + ry };
+    out[(i + 2) % 4] = { x: O.x, y: O.y };
+    out[(i + 3) % 4] = { x: cx - rx, y: cy - ry };
+    return out;
+  }
+
+  function pointInQuad(q, x, y) {
+    var inside = false;
+    for (var a = 0, b = 3; a < 4; b = a++) {
+      if (((q[a].y > y) !== (q[b].y > y)) &&
+          (x < (q[b].x - q[a].x) * (y - q[a].y) / (q[b].y - q[a].y) + q[a].x)) inside = !inside;
+    }
+    return inside;
+  }
+
   function onDown(e) {
     if (!state.quad) {
       state.quad = defaultQuad();
@@ -233,6 +274,10 @@
     }
     var p = evPos(e);
     var hit = hitHandle(p.x, p.y);
+    if (hit < 0 && squareLocked() && pointInQuad(state.quad, p.x, p.y)) {
+      hit = 4;                                  // 4 = move the whole square
+      state.dragFrom = p; state.dragQuad = clonesQuad(state.quad);
+    }
     if (hit >= 0) {
       state.dragging = hit;
       UI.overlay.setPointerCapture(e.pointerId);
@@ -241,13 +286,29 @@
   }
 
   function onMove(e) {
-    if (state.dragging < 0) return;
+    if (state.dragging < 0) {
+      // cursor hint: grab inside the square when it can be moved
+      if (state.quad && squareLocked()) {
+        var h = evPos(e);
+        UI.overlay.style.cursor = hitHandle(h.x, h.y) >= 0 ? 'pointer' : (pointInQuad(state.quad, h.x, h.y) ? 'move' : '');
+      }
+      return;
+    }
     var p = evPos(e);
+    var P = { x: Math.max(0, Math.min(state.imgW - 1, p.x)), y: Math.max(0, Math.min(state.imgH - 1, p.y)) };
+    var next;
+    if (state.dragging === 4) {
+      var dx = p.x - state.dragFrom.x, dy = p.y - state.dragFrom.y;
+      next = state.dragQuad.map(function (c) { return { x: c.x + dx, y: c.y + dy }; });
+    } else if (squareLocked()) {
+      next = squareFromDiagonal(state.quad, state.dragging, P);
+    } else {
+      next = clonesQuad(state.quad);
+      next[state.dragging] = P;
+    }
+    if (!inside(next)) return;                  // never let a corner leave the photo
     state.touched = true;
-    state.quad[state.dragging] = {
-      x: Math.max(0, Math.min(state.imgW - 1, p.x)),
-      y: Math.max(0, Math.min(state.imgH - 1, p.y))
-    };
+    state.quad = next;
     draw();
     schedulePreview();
   }

@@ -106,7 +106,10 @@ the crop's four corner markers and a live crop preview alongside. Drag the
 markers onto the inner corners of the PVC opening, then Apply (or press
 `Enter`; `R` resets to the auto-detected corners, `Esc` closes). This works
 the same for confident crops and for detections that need a fix — nothing is
-changed unless you move a marker. **◀ ▶ (or ← →)** move to the previous /
+changed unless you move a marker. With **Keep square** (on by default)
+the crop stays a true square: dragging a corner resizes/rotates it around the
+opposite corner, dragging inside it moves it, and it can never leave the
+photo; untick it for free corners. **◀ ▶ (or ← →)** move to the previous /
 next photo without leaving the editor; markers you dragged are applied before
 moving on, so a whole batch can be reviewed in one pass.
 
