@@ -78,7 +78,7 @@
   }
 
   var IMAGE_RE = /image\/(jpeg|jpg|pjpeg|png|tiff)/i;
-  var IMAGE_EXT = /\.(jpe?g|png|tiff?)$/i;
+  var IMAGE_EXT = /\.(jpe?g|png|tiff?|cr2|cr3|nef|nrw|orf|arw|dng|rw2|raf|pef|srw)$/i;
   var SHORTCUT_MIME = 'application/vnd.google-apps.shortcut';
   /** Image by MIME type OR by extension: Drive sometimes stores camera JPEGs
    * as application/octet-stream or with odd casing ("image/JPEG"). */
@@ -244,7 +244,9 @@
   }
 
   /** Full "ingest folder" helper: lists files, downloads images, parses CSVs. */
-  function ingestFolder(folderId, cbProgress) {
+  var DOWNLOAD_LANES = 4;
+
+  function ingestFolder(folderId, cbProgress, hooks) {
     return ensureToken()
       .then(function () { return listFolder(folderId); })
       .then(function (files) {
@@ -268,32 +270,39 @@
           var files = dec.all || [];
           files.forEach(function (f) { types[f.mimeType] = (types[f.mimeType] || 0) + 1; });
           var summary = Object.keys(types).map(function (t) { return types[t] + ' × ' + t; }).join('\n');
-          throw new Error('No JPEG/PNG/TIFF images found in this Drive folder (subfolders included).\n\n'
+          throw new Error('No JPEG/PNG/TIFF/RAW images found in this Drive folder (subfolders included).\n\n'
             + (files.length ? 'Found ' + files.length + ' other file(s):\n' + summary
                             : 'The folder listing came back empty — check that this account can open the folder.'));
         }
-        var done = 0, out = [], failed = [];
-        // Always return a Promise: the old version returned the plain `out`
-        // array when there was nothing (left) to download, so
-        // `next(0).then(...)` threw "next(...).then is not a function" on any
-        // folder without images directly inside it (e.g. only subfolders).
-        function next(i) {
-          if (i >= dec.images.length) return Promise.resolve(out);
-          var f = dec.images[i];
+        if (hooks && hooks.onCsvs) hooks.onCsvs(dec.csvs);
+        var done = 0, out = [], failed = [], nextIdx = 0;
+        var lanes = Math.min(DOWNLOAD_LANES, dec.images.length);
+        // Several downloads in flight (one at a time left most of the
+        // bandwidth idle). With hooks.onItem each photo is handed over as soon
+        // as it arrives, so processing starts right away; the promise onItem
+        // returns is the backpressure (wait while too many photos are queued
+        // in memory). Without hooks, photos are collected and returned.
+        function lane() {
+          if (nextIdx >= dec.images.length) return Promise.resolve();
+          var f = dec.images[nextIdx++];
           return downloadFile(f.id).then(function (blob) {
-            out.push({ blob: blob, name: f.name, path: f.path, driveId: f.id, mimeType: f.mimeType });
+            var item = { blob: blob, name: f.name, path: f.path, driveId: f.id, mimeType: f.mimeType };
+            if (hooks && hooks.onItem) return hooks.onItem(item);
+            out.push(item);
           }, function (err) {
             // one bad file must not discard everything already downloaded
             failed.push(f.path || f.name);
             console.warn('Drive download failed', f.name, err);
           }).then(function () {
             done++;
-            cbProgress && cbProgress('Downloading ' + done + '/' + dec.images.length);
-            return next(i + 1);
+            cbProgress && cbProgress('Downloaded ' + done + '/' + dec.images.length);
+            return lane();
           });
         }
-        return next(0).then(function () {
-          return { items: out, csvs: dec.csvs, failed: failed };
+        var all = [];
+        for (var l = 0; l < lanes; l++) all.push(lane());
+        return Promise.all(all).then(function () {
+          return { items: out, csvs: dec.csvs, failed: failed, total: dec.images.length };
         });
       });
   }

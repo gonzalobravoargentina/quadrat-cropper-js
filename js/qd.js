@@ -39,7 +39,7 @@
   // Detector version — bumped when qd.js or its calling contract changes.
   // app.js surfaces this in the page title / header so users can confirm
   // they are running a fresh build (not a cached one).
-  var VERSION = '1.6.0';
+  var VERSION = '1.7.0';
 
   var DEFAULTS = {
     workWidth: 1152,
@@ -1382,6 +1382,13 @@
     return { quad: out, side: side, residual: side > 0 ? res / side : 1 };
   }
 
+  /** Scale a quad about its centroid (f = 0.95 → 5 % smaller side). */
+  function scaleQuad(quad, f) {
+    var mx = 0, my = 0;
+    quad.forEach(function (c) { mx += c.x / 4; my += c.y / 4; });
+    return quad.map(function (c) { return { x: mx + (c.x - mx) * f, y: my + (c.y - my) * f }; });
+  }
+
   /**
    * Keep a quad inside [0,W-1]×[0,H-1]: translate first, shrink about its
    * centre only if it cannot fit. Returns { quad, moved, shrunk }.
@@ -1479,6 +1486,7 @@
     solveH: solveH,
     fitSquare: fitSquare,
     fitInside: fitInside,
+    scaleQuad: scaleQuad,
     applyH: applyH,
     isGreenAt: isGreenAt,
     polyArea: polyArea,
