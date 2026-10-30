@@ -30,13 +30,14 @@
     UI.dialog.addEventListener('close', releaseSrc);
     document.getElementById('btnEditorApply').addEventListener('click', apply);
     document.getElementById('btnEditorReset').addEventListener('click', function () {
-      state.quad = clonesQuad(autoQuadOf(state.item));
+      state.quad = clonesQuad(autoQuadOf(state.item)) || defaultQuad();
       draw(); schedulePreview();
     });
 
     UI.img.addEventListener('load', function () {
       state.imgW = UI.img.naturalWidth;
       state.imgH = UI.img.naturalHeight;
+      if (!state.quad) state.quad = defaultQuad();
       resizeCanvas();
       draw(); schedulePreview();
       setTimeout(resizeCanvas, 0);
@@ -54,6 +55,13 @@
 
   function autoQuadOf(item) {
     return (item.det && (item.det.quadFull || item.det.quad)) || null;
+  }
+
+  // showModal() focuses the first button (Reset), so a plain Enter used to
+  // reset the markers instead of applying. Focus Apply after every open.
+  function focusApply() {
+    var b = document.getElementById('btnEditorApply');
+    if (b) b.focus();
   }
 
   function open(item, appliedCb) {
@@ -74,13 +82,16 @@
       state.urlFor = item.id;
       UI.img.src = state.imgURL;
       UI.dialog.showModal();
+      focusApply();
       return; // the img 'load' handler draws markers + preview
     }
     // Same photo re-opened: no 'load' event fires, so redraw explicitly.
     // Otherwise the overlay still shows the markers from the previous visit
     // (e.g. moved, then closed without Apply) while state.quad was reset to
     // the item's corners — the handles you see are not the ones you drag.
+    if (!state.quad && state.imgW) state.quad = defaultQuad();
     UI.dialog.showModal();
+    focusApply();
     resizeCanvas();
     schedulePreview();
   }
@@ -154,15 +165,26 @@
     return { x: (e.clientX - f.ox) / f.sx, y: (e.clientY - f.oy) / f.sy };
   }
 
+  /**
+   * Starting markers when detection found no frame: a centred square of
+   * half the short side (the protocol centres the opening in the shot).
+   * Previously nothing was drawn until a first click on the photo, so a
+   * failed item opened as a bare photo with no visible way to start.
+   */
+  function defaultQuad() {
+    var s = Math.min(state.imgW, state.imgH) * 0.5;
+    var cx = state.imgW / 2, cy = state.imgH / 2;
+    return [
+      { x: cx - s / 2, y: cy - s / 2 },
+      { x: cx + s / 2, y: cy - s / 2 },
+      { x: cx + s / 2, y: cy + s / 2 },
+      { x: cx - s / 2, y: cy + s / 2 }
+    ];
+  }
+
   function onDown(e) {
     if (!state.quad) {
-      // create markers on first click if none
-      state.quad = [
-        { x: state.imgW * 0.25, y: state.imgH * 0.25 },
-        { x: state.imgW * 0.75, y: state.imgH * 0.25 },
-        { x: state.imgW * 0.75, y: state.imgH * 0.75 },
-        { x: state.imgW * 0.25, y: state.imgH * 0.75 }
-      ];
+      state.quad = defaultQuad();
       draw(); redrawPreview();
     }
     var p = evPos(e);
@@ -248,7 +270,7 @@
       return;
     }
     if (e.key === 'r' || e.key === 'R') {
-      state.quad = clonesQuad(autoQuadOf(state.item));
+      state.quad = clonesQuad(autoQuadOf(state.item)) || defaultQuad();
       draw(); schedulePreview();
     }
   });

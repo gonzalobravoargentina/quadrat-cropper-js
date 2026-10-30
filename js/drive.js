@@ -117,8 +117,38 @@
     });
   }
 
-  /** List all files of a Drive folder (images + csv), paginated. */
-  function listFolder(folderId) {
+  var FOLDER_MIME = 'application/vnd.google-apps.folder';
+  var MAX_DEPTH = 4; // locality / site / strata / … is plenty
+
+  /**
+   * List all files under a Drive folder, descending into subfolders.
+   * P2P data is usually organised locality/site/strata/, so a non-recursive
+   * listing of a locality or site folder found 0 images (which then crashed
+   * ingestFolder, see below). Each file gets `path` = "sub/dir/name".
+   */
+  function listFolder(folderId, prefix, depth) {
+    prefix = prefix || '';
+    depth = depth || 0;
+    return listChildren(folderId).then(function (children) {
+      var files = [], subs = [];
+      children.forEach(function (f) {
+        if (f.mimeType === FOLDER_MIME) subs.push(f);
+        else { f.path = prefix + f.name; files.push(f); }
+      });
+      if (depth >= MAX_DEPTH || !subs.length) return files;
+      // sequential: keeps request rate polite and order deterministic
+      return subs.reduce(function (p, s) {
+        return p.then(function () {
+          return listFolder(s.id, prefix + s.name + '/', depth + 1).then(function (sub) {
+            files = files.concat(sub);
+          });
+        });
+      }, Promise.resolve()).then(function () { return files; });
+    });
+  }
+
+  /** List the direct children of one Drive folder, paginated. */
+  function listChildren(folderId) {
     var files = [], pageToken = '';
     function onePage(q) {
       var u = new URL('https://www.googleapis.com/drive/v3/files');
@@ -211,19 +241,31 @@
         });
       })
       .then(function (dec) {
-        var done = 0, out = [];
+        if (!dec.images.length) {
+          throw new Error('No JPEG/PNG/TIFF images found in this Drive folder (subfolders included).');
+        }
+        var done = 0, out = [], failed = [];
+        // Always return a Promise: the old version returned the plain `out`
+        // array when there was nothing (left) to download, so
+        // `next(0).then(...)` threw "next(...).then is not a function" on any
+        // folder without images directly inside it (e.g. only subfolders).
         function next(i) {
-          if (i >= dec.images.length) return out;
+          if (i >= dec.images.length) return Promise.resolve(out);
           var f = dec.images[i];
           return downloadFile(f.id).then(function (blob) {
-            out.push({ blob: blob, name: f.name, driveId: f.id, mimeType: f.mimeType });
+            out.push({ blob: blob, name: f.name, path: f.path, driveId: f.id, mimeType: f.mimeType });
+          }, function (err) {
+            // one bad file must not discard everything already downloaded
+            failed.push(f.path || f.name);
+            console.warn('Drive download failed', f.name, err);
+          }).then(function () {
             done++;
             cbProgress && cbProgress('Downloading ' + done + '/' + dec.images.length);
             return next(i + 1);
           });
         }
         return next(0).then(function () {
-          return { items: out, csvs: dec.csvs };
+          return { items: out, csvs: dec.csvs, failed: failed };
         });
       });
   }

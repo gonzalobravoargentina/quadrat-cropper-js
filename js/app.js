@@ -232,13 +232,18 @@
     setProgress(true, 'Listing Drive folder…');
     return QDDrive.ingestFolder(folderId, function (msg) {
       setProgress(true, msg);
-    }).then(function (res) {      state.csvs = (res.csvs || []).filter(Boolean);
+    }).then(function (res) {
+      state.csvs = (res.csvs || []).filter(Boolean);
       res.items.forEach(function (it) {
         state.items.push(newItem(it.name, it.blob, it.driveId));
       });
       setProgress(false);
       render();
       startQueue();
+      if (res.failed && res.failed.length) {
+        alert(res.failed.length + ' file(s) could not be downloaded from Drive and were skipped:\n\n'
+          + res.failed.slice(0, 15).join('\n') + (res.failed.length > 15 ? '\n…' : ''));
+      }
     }).catch(function (e) {
       setProgress(false);
       alert(String(e.message || e));
