@@ -39,7 +39,7 @@
   // Detector version — bumped when qd.js or its calling contract changes.
   // app.js surfaces this in the page title / header so users can confirm
   // they are running a fresh build (not a cached one).
-  var VERSION = '1.10.0';
+  var VERSION = '1.11.0';
 
   var DEFAULTS = {
     workWidth: 1152,
@@ -48,7 +48,7 @@
     // a fixed height over the 25 cm opening) keeps this in a narrow band;
     // combos far outside it are sub-region or coupe-assembly clumps
     openingSideMin: 0.38,
-    openingSideMax: 0.75,
+    openingSideMax: 0.95,   // was 0.75: TG-7 1:1 subtidal shots and tight hand-held shots fill ~85 % of the frame
     hueMin: 118, hueMax: 172,
     satMin: 0.13,
     valMin: 0.045,
@@ -114,6 +114,18 @@
       hueMin: 158, hueMax: 205, satMin: 0.13, valMin: 0.30,
       highlightHueMin: 140, highlightHueMax: 220,
     },
+    // Thin white / aluminium rod frames (subtidal programs: Canon SL1 / CR2,
+    // GoPro): no hue of their own — bright, weakly saturated pixels. Last
+    // resort (also only when nothing reached 0.8), because bright sand and
+    // blown highlights share the band; the structural scoring + the app's
+    // square / confidence checks flag the doubtful ones. On 125 field samples
+    // it recovered 10 photos (7 correct, 2 flagged for review, 1 ambiguous
+    // two-cell frame) and fixed the AP161656 fixture in the browser.
+    white: {
+      color: 'white',
+      hueMin: -1, hueMax: 360, satMin: 0, satMax: 0.30, valMin: 0.62,
+      highlightHueMin: 0, highlightHueMax: 360,
+    },
   };
 
   function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
@@ -172,7 +184,8 @@
         else h = 60 * ((r - g) / df) + 240;
         if (h < 0) h += 360;
       }
-      if (h >= opts.hueMin && h <= opts.hueMax && s >= opts.satMin && v >= opts.valMin) {
+      if (h >= opts.hueMin && h <= opts.hueMax && s >= opts.satMin && v >= opts.valMin &&
+          (opts.satMax === undefined || s <= opts.satMax)) {
         mask[i] = 1;
         cx += i % W; cy += (i / W) | 0; cnt++;
       }
@@ -686,7 +699,7 @@
     var scaled = scale < 1 ? boxScale(image, Math.round(srcW * scale), Math.round(srcH * scale))
                            : { width: image.width, height: image.height, data: image.data };
 
-    var names = ['mint', 'yellow', 'cyan'];
+    var names = ['mint', 'yellow', 'cyan', 'white'];
     if (options && FRAME_COLORS[options.color]) names = [options.color];
     else if (options && (options.hueMin !== undefined || options.satMin !== undefined || options.valMin !== undefined)) {
       names = ['custom']; // caller pinned an explicit band — single pass
@@ -705,7 +718,7 @@
     for (var pi = 0; pi < names.length; pi++) {
       var nm = names[pi];
       // fallback pass: skip it when an earlier color is already confident
-      if (nm === 'cyan' && bestConf >= 0.8) continue;
+      if ((nm === 'cyan' || nm === 'white') && bestConf >= 0.8) continue;
       var passOpts = (nm === 'custom')
         ? Object.assign({}, opts, { color: 'custom' })
         : Object.assign({}, opts, FRAME_COLORS[nm]);
