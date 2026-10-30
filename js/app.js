@@ -296,6 +296,13 @@
       QDGrid.updateCard(it);
       renderStats();
     }
+    // The batch-typical size is only known once enough photos are in, so the
+    // first ones were checked without it: re-check every auto crop now
+    // (flags/confidence only — the crop itself does not change).
+    state.items.forEach(function (o) {
+      if (o.source === 'auto' && o.det && o.det.geom) { applyChecks(o); QDGrid.updateCard(o); }
+    });
+    renderStats();
     setProgress(false);
     state.busy = false;
     ui.exportBtn.disabled = false;
@@ -338,13 +345,22 @@
       // map detection-space quad to ORIGINAL image px once — everything
       // downstream (crop, manual editor, manifest) speaks original px.
       var fac = dec.natW / id.width;
-      var quadFull = det.quad.map(function (c) {
+      var quadRaw = det.quad.map(function (c) {
         return { x: c.x * fac, y: c.y * fac };
       });
-      det.quadFull = quadFull;
+      // The recommended crop is ALWAYS a square (rigid camera mount → the
+      // opening is square in the image) and always inside the photo, so the
+      // editor never shows an unreachable marker. See squareGeometry().
+      var g = squareGeometry(quadRaw, dec.natW, dec.natH);
+      det.quadRaw = quadRaw;
+      det.quadFull = g.quad;
+      det.geom = g;
+      it.sidePx = g.side;
+      it.imgShort = Math.min(dec.natW, dec.natH);
+      applyChecks(it);
       it.source = 'auto';
       it.status = 'done';
-      await makeCrop(it, quadFull, 'auto');
+      await makeCrop(it, g.quad, 'auto');
     } else {
       it.status = 'failed';
       // show the source photo as the card thumbnail so failures can be
@@ -354,6 +370,68 @@
     }
     // keep full-resolution source for manual review of failures only
     it.keptForReview = !it.ok;
+  }
+
+  // ------------------------------------------------- square-crop geometry
+
+  // Tolerances for the recommended crop (fractions of the square's side).
+  var SQUARE_TOL_REVIEW = 0.04;   // > 4 % corner shift → "suggested review"
+  var SQUARE_TOL_MANUAL = 0.12;   // > 12 % → "needs manual corners"
+  var SIZE_TOL = [0.8, 1.25];     // side vs batch-typical side
+  var SIZE_MIN_SAMPLES = 5;       // clean detections needed to know "typical"
+  var CAP_REVIEW = 0.79, CAP_MANUAL = 0.54;
+
+  /** Detector quad → best-fit square, kept inside the image. */
+  function squareGeometry(quadRaw, W, H) {
+    var sq = QD.fitSquare(quadRaw);
+    var ins = QD.fitInside(sq.quad, W, H);
+    var q = ins.quad;
+    var side = Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y);
+    return { quad: q, side: side, residual: sq.residual, moved: ins.moved, shrunk: ins.shrunk };
+  }
+
+  /**
+   * Typical square side for this batch, as a fraction of the photo's short
+   * side (robust to mixed cameras/resolutions): median over clean, confident
+   * auto detections, excluding `self`. null until there are enough samples.
+   */
+  function typicalSideFrac(self) {
+    var fr = state.items.filter(function (o) {
+      return o !== self && o.source === 'auto' && o.det && o.det.geom &&
+        (o.det.confidence || 0) >= 0.8 && o.det.geom.residual <= SQUARE_TOL_REVIEW &&
+        !o.det.geom.moved && !o.det.geom.shrunk && o.imgShort;
+    }).map(function (o) { return o.sidePx / o.imgShort; }).sort(function (a, b) { return a - b; });
+    if (fr.length < SIZE_MIN_SAMPLES) return null;
+    return fr[Math.floor(fr.length / 2)];
+  }
+
+  /** Recompute flags + capped confidence of an auto crop from its geometry. */
+  function applyChecks(it) {
+    var det = it.det, g = det && det.geom;
+    if (!g) return;
+    var flags = (det.flags || []).slice(), cap = 1;
+    var pct = Math.round(g.residual * 100);
+    if (g.residual > SQUARE_TOL_MANUAL) {
+      flags.unshift('detected outline far from square (' + pct + '% off) — replaced by best-fit square; check corners');
+      cap = Math.min(cap, CAP_MANUAL);
+    } else if (g.residual > SQUARE_TOL_REVIEW) {
+      flags.unshift('detected outline not square (' + pct + '% off) — replaced by best-fit square');
+      cap = Math.min(cap, CAP_REVIEW);
+    }
+    if (g.moved || g.shrunk) {
+      flags.unshift('frame runs off the photo — square kept inside the image; check corners');
+      cap = Math.min(cap, CAP_REVIEW);
+    }
+    var frac = typicalSideFrac(it);
+    if (frac) {
+      var exp = frac * it.imgShort, ratio = it.sidePx / exp;
+      if (ratio < SIZE_TOL[0] || ratio > SIZE_TOL[1]) {
+        flags.unshift('unusual size: ' + Math.round(it.sidePx) + ' px vs ~' + Math.round(exp) + ' px typical in this batch');
+        cap = Math.min(cap, CAP_REVIEW);
+      }
+    }
+    it.flags = flags;
+    it.conf = Math.min(det.confidence || 0, cap);
   }
 
   /** Warp the source image through `quad` into a square JPEG blob + thumbnail. */

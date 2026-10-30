@@ -40,6 +40,7 @@
          <span class="chip green"></span> auto-accepted
          <span class="chip amber"></span> review suggested
          <span class="chip red"></span> needs manual corners
+         <span class="chip blue"></span> cropped by hand
        </span>
        <button id="btnDropHelp" type="button" class="linklike">how it works</button></p>
   </div>
@@ -96,7 +97,11 @@
         the .zip trick or a one-time sign-in (⚙).</li>
     <li><b>Wait for the scan</b>: green ring = confident auto-crop
         (confidence ≥ 0.80), amber = review suggested (0.55–0.80),
-        red = needs manual corners (&lt; 0.55 or detection failed).</li>
+        red = needs manual corners (&lt; 0.55 or detection failed),
+        blue = you cropped it by hand in the editor. The suggested crop is
+        always a square inside the photo; if the detected outline was not
+        square, ran off the photo or is much smaller/larger than the rest of
+        the batch, it is flagged amber/red for review.</li>
     <li><b>Review</b>: click any thumbnail to open the full photo with the
         crop's corner markers and a live crop preview alongside. Drag the
         markers onto the inner corners of the frame, then

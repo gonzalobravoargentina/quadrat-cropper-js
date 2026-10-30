@@ -12,6 +12,9 @@
   function tierOf(item) {
     if (item.status === 'processing') return 'processing';
     if (item.status === 'failed') return 'failed';
+    // hand-cropped in the editor → its own (blue) tier, not the red "manual"
+    // one, which means "still needs manual corners"
+    if (item.source === 'manual' && item.cropBlob) return 'adjusted';
     if (item.cornerOverride && item.source !== 'auto') return 'manual';
     if (item.source === 'manual') return 'manual';
     if (!item.ok) return 'failed';
@@ -48,7 +51,8 @@
     card.appendChild(tw);
 
     if (item.ok) {
-      var badge = el('div', 'badge' + (tierOf(item) === 'manual' ? ' manual' : ''));
+      var t = tierOf(item);
+      var badge = el('div', 'badge' + (t === 'adjusted' ? ' adjusted' : t === 'manual' ? ' manual' : ''));
       badge.textContent = item.cornerOverride || item.source === 'manual'
         ? 'manual'
         : Math.round(item.conf * 100) + '%';

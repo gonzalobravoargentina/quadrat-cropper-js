@@ -38,6 +38,7 @@
       state.imgW = UI.img.naturalWidth;
       state.imgH = UI.img.naturalHeight;
       if (!state.quad) state.quad = defaultQuad();
+      clampQuad();
       resizeCanvas();
       draw(); schedulePreview();
       setTimeout(resizeCanvas, 0);
@@ -90,6 +91,7 @@
     // (e.g. moved, then closed without Apply) while state.quad was reset to
     // the item's corners — the handles you see are not the ones you drag.
     if (!state.quad && state.imgW) state.quad = defaultQuad();
+    if (state.imgW) clampQuad();
     UI.dialog.showModal();
     focusApply();
     resizeCanvas();
@@ -180,6 +182,16 @@
       { x: cx + s / 2, y: cy + s / 2 },
       { x: cx - s / 2, y: cy + s / 2 }
     ];
+  }
+
+  /** Bring every marker inside the photo so it can always be grabbed
+   * (a corner outside the visible image could not be clicked to move it). */
+  function clampQuad() {
+    if (!state.quad || !state.imgW) return;
+    state.quad = state.quad.map(function (c) {
+      return { x: Math.max(0, Math.min(state.imgW - 1, c.x)),
+               y: Math.max(0, Math.min(state.imgH - 1, c.y)) };
+    });
   }
 
   function onDown(e) {
