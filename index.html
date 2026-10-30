@@ -9,8 +9,13 @@
 <header class="topbar">
   <h1>Quadrat Cropper <span id="verTag" class="ver"></span></h1>
   <div class="actions">
-    <button id="btnAddFiles" type="button">＋ Add images</button>
-    <button id="btnAddFolder" type="button" title="Add a whole folder; its subfolders become metadata groups">＋ Add folder</button>
+    <details class="addmenu" id="addMenu">
+      <summary class="btnlike">＋ Add photos ▾</summary>
+      <div class="addmenu-list">
+        <button id="btnAddFolder" type="button">📁 A folder (with all its subfolders)…</button>
+        <button id="btnAddFiles" type="button">🖼 Individual photos or a .zip…</button>
+      </div>
+    </details>
     <button id="btnAddDrive" type="button">⊕ Add from Google Drive</button>
     <input type="text" id="folderLink" placeholder="Paste a Drive photo link (no sign-in) or folder link…"
            spellcheck="false" autocomplete="off">
@@ -38,8 +43,9 @@
 <main>
  <div id="photosPanel">
   <div id="dropzone" class="dropzone">
-    <p><strong>Drop images — or a Drive-exported .zip — here</strong>, add them
-       with <em>Add images</em>, or paste a Drive link above.</p>
+    <p><strong>Drop photos, folders or a Drive-exported .zip here</strong> —
+       or click to choose a folder (all its subfolders are included; their names
+       fill the metadata) — or paste a Drive link above.</p>
     <p class="muted">Each photo is scanned for the PVC quadrat frame
        (mint-green or yellow); the square opening is auto-cropped.
        <span class="legend">

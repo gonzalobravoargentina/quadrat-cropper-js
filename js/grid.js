@@ -11,7 +11,8 @@
   /** Tier (color class) for an item. */
   function tierOf(item) {
     if (item.excluded) return 'excluded';
-    if (item.status === 'processing') return 'processing';
+    // waiting photos are neutral, not red: red means "failed / needs corners"
+    if (item.status === 'processing' || item.status === 'queued') return 'processing';
     if (item.status === 'failed') return 'failed';
     // hand-cropped in the editor → its own (blue) tier, not the red "manual"
     // one, which means "still needs manual corners"

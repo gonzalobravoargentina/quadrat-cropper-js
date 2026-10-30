@@ -62,7 +62,11 @@ for everyday use.
 
 Three ways to get images in, in order of least setup:
 
-1. **Drag & drop** image files (or hundreds of them) onto the page — JPEG,
+**＋ Add photos ▾ → A folder** picks a whole folder **including all its
+subfolders** (their names fill the metadata; CSVs inside are joined as
+metadata too). Clicking the drop area does the same.
+
+1. **Drag & drop** image files or folders (or hundreds of them) onto the page — JPEG,
    PNG, TIFF, or camera **RAW** (Canon CR2/CR3, Nikon NEF/NRW, Olympus ORF,
    Sony ARW, DNG, Panasonic RW2, Fuji RAF, Pentax PEF, Samsung SRW; see
    [RAW files](#raw-files)).

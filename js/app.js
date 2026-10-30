@@ -44,7 +44,7 @@
     ui.verTag.textContent = 'v' + VER;
     ui.footVer.textContent = 'v' + VER;
 
-    ui.addFiles.addEventListener('click', function () { ui.fileInput.click(); });
+    ui.addFiles.addEventListener('click', function () { closeAddMenu(); ui.fileInput.click(); });
     ui.fileInput.addEventListener('change', function () {
       addFiles(ui.fileInput.files);
       ui.fileInput.value = '';
@@ -102,7 +102,7 @@
     });
     var folderInput = el('folderInput');
     if (folderInput) {
-      el('btnAddFolder').addEventListener('click', function () { folderInput.click(); });
+      el('btnAddFolder').addEventListener('click', function () { closeAddMenu(); folderInput.click(); });
       folderInput.addEventListener('change', function () { addFiles(folderInput.files); folderInput.value = ''; });
     }
     // Photos | Metadata tabs
@@ -110,7 +110,12 @@
     Array.prototype.forEach.call(document.querySelectorAll('.tabs [data-tab]'), function (b) {
       b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); });
     });
-    ui.drop.addEventListener('click', function () { ui.fileInput.click(); });
+    // the usual case is a whole field folder (country/…/site/strata)
+    ui.drop.addEventListener('click', function () { (el('folderInput') || ui.fileInput).click(); });
+    document.addEventListener('click', function (e) {
+      var m = el('addMenu');
+      if (m && m.open && !m.contains(e.target)) m.open = false;
+    });
 
     QDGrid.init({ onThumb: onThumbClick, onExclude: toggleExclude });
     QDEditor.init();
@@ -164,9 +169,23 @@
       .then(function () { return out; });
   }
 
+  function closeAddMenu() { var m = el('addMenu'); if (m) m.open = false; }
+
   function addFiles(fileList) {
     var files = Array.from(fileList);
     var load = 'Load ' + (++loadCount);
+    // CSVs inside a picked/dropped folder are metadata (same as in a zip or a
+    // Drive folder): read them before the photos are queued so they join
+    var csvFiles = files.filter(function (f) { return /\.csv$/i.test(f.name); });
+    if (csvFiles.length) {
+      Promise.all(csvFiles.map(function (f) {
+        return f.text().then(function (t) { var p = QDMeta.parseCSV(t); p.name = f.name; return p; }, function () { return null; });
+      })).then(function (cs) {
+        state.csvs = state.csvs.concat(cs.filter(Boolean));
+        addFiles(files.filter(function (f) { return !/\.csv$/i.test(f.name); }));
+      });
+      return;
+    }
     var zips = files.filter(function (f) { return /\.zip$/i.test(f.name); });
     var imgs = files.filter(function (f) {
       return !/\.zip$/i.test(f.name) && (/image|jpe?g/i.test(f.type) || /\.(jpe?g|png|tiff?)$/i.test(f.name) || QDRaw.isRaw(f.name));
