@@ -248,7 +248,14 @@
 
   function ingestFolder(folderId, cbProgress, hooks) {
     return ensureToken()
-      .then(function () { return listFolder(folderId); })
+      // root folder name first, so a link to e.g. ".../LIMITE/LOWTIDE" keeps
+      // LOWTIDE in every photo's path (metadata groups come from these paths)
+      .then(function () {
+        return gfetch('https://www.googleapis.com/drive/v3/files/' + folderId + '?fields=name&supportsAllDrives=true')
+          .then(function (r) { return r.ok ? r.json() : {}; })
+          .catch(function () { return {}; });
+      })
+      .then(function (meta) { return listFolder(folderId, meta && meta.name ? meta.name + '/' : ''); })
       .then(function (files) {
         var images = files.filter(isImage);
         var csvs = files.filter(function (f) { return /csv|text\/plain/.test(f.mimeType) || /\.csv$/i.test(f.name); });

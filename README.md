@@ -120,6 +120,34 @@ thumbnails can be fixed in the editor to qualify. The
   (status `excluded` for the ones removed with ✕)
 - `review.json` — full per-image record incl. corner coordinates used
 
+### Metadata tab (CoralNet CSV + EXIF)
+
+Photos are grouped by their **source folder** — Drive subfolders, folders
+inside a zip, or a folder added with **＋ Add folder** / dropped from Finder
+(e.g. a Google Drive for desktop folder). The **Metadata** tab shows one row
+per group; fill the fields once per group (⇣ copies the first row down a
+column). With the **Intertidal — MBON Pole to Pole (CoralNet)** preset:
+
+- read from each photo: `Name`, `Date`, `Latitude`, `Longitude`, `Camera`
+  (EXIF date, GPS and model);
+- the same for every photo: `Height (cm)` = 42, `Strobes` = no,
+  `Framing gear used` = 25x25cm;
+- per group: `country`, `state`, `locality`, `site`, `strata`
+  (HIGHTIDE / MIDTIDE / LOWTIDE), `Photographer`, `Comments` (e.g. AMP code),
+  `Depth`, `Water quality`, `White balance card`. Folder names pre-fill
+  `state / locality / site / strata` (a folder like *LOWTIDE*, *bajo* or
+  *low* is read as the strata); country and photographer default to the last
+  values used.
+
+The ZIP then names each crop like its source photo (optionally
+`YYYYMMDD_` + name), adds **`metadata_coralnet.csv`** in CoralNet's upload
+format (columns `Name, Date, country, state, locality, site, strata,
+Height (cm), Latitude, Longitude, Depth, Camera, Photographer, Water quality,
+Strobes, Framing gear used, White balance card, Comments`) and embeds the same
+information in every crop's **EXIF** (date, GPS, make/model, photographer as
+Artist, the group fields in ImageDescription/UserComment). Export warns when
+a required field is empty. Choose *None* as preset to skip all of this.
+
 ### RAW files
 
 Browsers cannot decode RAW sensor data, so the app uses the **largest JPEG
@@ -259,6 +287,8 @@ js/qd.js            detection core (browser + Node compatible)
 js/app.js           orchestration, worker-pool queue, square-crop checks, ingestion UI
 js/worker.js        per-photo pipeline in a Web Worker (decode → detect → square → warp → encode)
 js/raw.js           camera RAW support (largest embedded JPEG + RAW EXIF)
+js/metatab.js       Metadata tab: presets, per-folder groups, CoralNet CSV rows
+js/exifwrite.js     writes EXIF (date, GPS, camera, fields) into the exported crops
 js/grid.js          thumbnail grid + confidence ring highlighting
 js/editor.js        manual corner-marker editor + live crop preview
 js/drive.js         Google Identity Services (OAuth token), Picker, Drive v3 REST,
@@ -266,7 +296,7 @@ js/drive.js         Google Identity Services (OAuth token), Picker, Drive v3 RES
 js/unzip.js         in-browser ZIP reader (STORE + DEFLATE via DecompressionStream)
                     for the "download Drive folder as .zip" flow
 js/export.js        ZIP writer (STORE), manifest CSV, review.json
-js/exif.js          minimal EXIF reader (JPEG + TIFF-based RAW headers)
+js/exif.js          minimal EXIF reader incl. GPS (JPEG + TIFF-based RAW headers)
 js/metadata.js      filename parsing (date/site/group/code) + CSV join
 tests/run.js        regression suite (npm test; also run by CI)
 tests/images/       captured fixtures + expected.json

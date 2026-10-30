@@ -63,13 +63,40 @@
           var vo = readValueOffset(e);
           if (vo + 1 > dv.byteLength - 1) continue;
           out[meta.key] = (meta.type === 'ascii')
-            ? readString(null, dv, vo, u32(e + 4))
+            ? readString(null, dv, vo, u32(e + 4)).trim() // TG-6 pads Model with spaces
             : u16(vo);
         } else if (tag === 0x8769) {           // Exif IFD pointer (TIFF-relative)
           readIfd(u32(e + 8), EXIF_TAGS);
+        } else if (tag === 0x8825 && tags === TAGS) { // GPS IFD pointer
+          readGps(u32(e + 8));
         }
       }
     }
+    /** GPS IFD → decimal degrees (signed by the N/S, E/W refs). */
+    function readGps(offset) {
+      if (offset + 2 > dv.byteLength) return;
+      var n = u16(offset), ref = {}, val = {};
+      for (var i = 0; i < n; i++) {
+        var e = offset + 2 + i * 12;
+        if (e + 12 > dv.byteLength) return;
+        var tag = u16(e), type = u16(e + 2), cnt = u32(e + 4);
+        if ((tag === 1 || tag === 3) && type === 2) ref[tag] = String.fromCharCode(dv.getUint8(e + 8));
+        if ((tag === 2 || tag === 4) && type === 5 && cnt === 3) {
+          var o = u32(e + 8);
+          if (o + 24 > dv.byteLength) continue;
+          var d = [0, 1, 2].map(function (k) {
+            var den = u32(o + k * 8 + 4);
+            return den ? u32(o + k * 8) / den : 0;
+          });
+          val[tag] = d[0] + d[1] / 60 + d[2] / 3600;
+        }
+      }
+      if (val[2] != null && val[4] != null && (val[2] || val[4])) {
+        out.latitude = (ref[1] === 'S' ? -1 : 1) * val[2];
+        out.longitude = (ref[3] === 'W' ? -1 : 1) * val[4];
+      }
+    }
+
     readIfd(t0, TAGS);
     return out;
   }

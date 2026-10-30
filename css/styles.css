@@ -182,3 +182,24 @@ main { padding: 16px; }
 .gh-icon { width: 14px; height: 14px; fill: currentColor; opacity: 0.9; }
 .foot-open { border: 1px solid var(--line); border-radius: 10px; padding: 0 8px;
              font-size: 11px; }
+
+/* Photos | Metadata tabs */
+.tabs { display: flex; gap: 4px; margin-top: 8px; }
+.tabs button { border-radius: 8px 8px 0 0; border-bottom: 0; opacity: .7; }
+.tabs button.active { opacity: 1; background: var(--panel); border-color: var(--accent); }
+
+/* metadata tab */
+.meta-panel { padding: 14px 16px; }
+.meta-head { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 10px; }
+.meta-head label { display: flex; gap: 8px; align-items: center; }
+.meta-fixed { margin: 6px 0 12px; line-height: 2; }
+.meta-fixed code { background: #0b1014; padding: 2px 6px; border-radius: 5px; margin-right: 4px; }
+.meta-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+.meta-table { border-collapse: collapse; font-size: 12.5px; min-width: 100%; }
+.meta-table th, .meta-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.meta-table th { position: sticky; top: 0; background: var(--panel); font-weight: 600; }
+.meta-table td.gname { max-width: 280px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.meta-table input, .meta-table select { width: 9.5em; font-size: 12.5px; padding: 3px 5px; }
+.meta-table .missing { outline: 1px solid var(--red); }
+.meta-table .req { color: var(--red); }
+.meta-table .filldown { margin-left: 4px; padding: 0 5px; font-size: 11px; line-height: 16px; }

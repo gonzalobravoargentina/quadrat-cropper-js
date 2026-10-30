@@ -10,6 +10,7 @@
   <h1>Quadrat Cropper <span id="verTag" class="ver"></span></h1>
   <div class="actions">
     <button id="btnAddFiles" type="button">＋ Add images</button>
+    <button id="btnAddFolder" type="button" title="Add a whole folder; its subfolders become metadata groups">＋ Add folder</button>
     <button id="btnAddDrive" type="button">⊕ Add from Google Drive</button>
     <input type="text" id="folderLink" placeholder="Paste a Drive photo link (no sign-in) or folder link…"
            spellcheck="false" autocomplete="off">
@@ -28,9 +29,14 @@
     <span class="progress-text" id="progressText"></span>
   </div>
   <div class="stats" id="stats" hidden></div>
+  <nav class="tabs" role="tablist">
+    <button type="button" data-tab="photos" class="active" role="tab">Photos</button>
+    <button type="button" data-tab="meta" role="tab">Metadata</button>
+  </nav>
 </header>
 
 <main>
+ <div id="photosPanel">
   <div id="dropzone" class="dropzone">
     <p><strong>Drop images — or a Drive-exported .zip — here</strong>, add them
        with <em>Add images</em>, or paste a Drive link above.</p>
@@ -45,6 +51,19 @@
        <button id="btnDropHelp" type="button" class="linklike">how it works</button></p>
   </div>
   <section id="grid" class="grid"></section>
+ </div>
+ <section id="metaPanel" class="meta-panel" hidden>
+  <div class="meta-head">
+    <label>Project preset <select id="metaPreset"></select></label>
+    <label>File names in the ZIP
+      <select id="metaNameFormat">
+        <option value="source">as the source photo (AP126466.jpg)</option>
+        <option value="dateprefix">date + source (20260228_AP126466.jpg)</option>
+      </select>
+    </label>
+  </div>
+  <div id="metaBody"></div>
+ </section>
 </main>
 
 <!-- folder link without sign-in: offer the zero-setup paths -->
@@ -207,6 +226,7 @@
   </div>
 </dialog>
 
+<input type="file" id="folderInput" webkitdirectory multiple hidden>
 <input type="file" id="fileInput" accept="image/jpeg,image/*,.zip,.cr2,.cr3,.nef,.nrw,.orf,.arw,.dng,.rw2,.raf,.pef,.srw" multiple hidden>
 
 <footer class="foot muted small">
@@ -239,6 +259,8 @@
 <script src="js/unzip.js"></script>
 <script src="js/grid.js"></script>
 <script src="js/editor.js"></script>
+<script src="js/exifwrite.js"></script>
+<script src="js/metatab.js"></script>
 <script src="js/export.js"></script>
 <script src="js/app.js"></script>
 </body>

@@ -98,7 +98,17 @@
       ui.drop.addEventListener(evn, function (e) { e.preventDefault(); ui.drop.classList.remove('drag'); });
     });
     ui.drop.addEventListener('drop', function (e) {
-      addFiles(e.dataTransfer.files);
+      filesFromDrop(e.dataTransfer).then(addFiles);
+    });
+    var folderInput = el('folderInput');
+    if (folderInput) {
+      el('btnAddFolder').addEventListener('click', function () { folderInput.click(); });
+      folderInput.addEventListener('change', function () { addFiles(folderInput.files); folderInput.value = ''; });
+    }
+    // Photos | Metadata tabs
+    QDMetaTab.init({ getItems: function () { return state.items; }, onChange: function () {} });
+    Array.prototype.forEach.call(document.querySelectorAll('.tabs [data-tab]'), function (b) {
+      b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); });
     });
     ui.drop.addEventListener('click', function () { ui.fileInput.click(); });
 
@@ -114,8 +124,49 @@
 
   // ---------------------------------------------------------------- ingest
 
+  var loadCount = 0;
+  /** Folder part of a relative path ("A/B/C/x.jpg" → "A/B/C"), or null. */
+  function dirOf(path) {
+    var i = String(path || '').lastIndexOf('/');
+    return i > 0 ? path.slice(0, i) : null;
+  }
+
+  /**
+   * Walk dropped folders (Finder/Explorer, e.g. a Google Drive for desktop
+   * folder): files keep their relative path, so the folder structure becomes
+   * metadata groups exactly as with a Drive link or a zip.
+   */
+  function filesFromDrop(dt) {
+    var items = dt.items ? Array.from(dt.items) : [];
+    var entries = items.map(function (i) { return i.webkitGetAsEntry && i.webkitGetAsEntry(); }).filter(Boolean);
+    if (!entries.some(function (en) { return en.isDirectory; })) return Promise.resolve(Array.from(dt.files));
+    var out = [];
+    function walk(entry, prefix) {
+      if (entry.isFile) {
+        return new Promise(function (res) {
+          entry.file(function (f) { f._relPath = prefix + f.name; out.push(f); res(); }, function () { res(); });
+        });
+      }
+      return new Promise(function (res) {
+        var reader = entry.createReader(), all = [];
+        (function more() {
+          reader.readEntries(function (batch) {
+            if (!batch.length) {
+              all.reduce(function (p, ch) { return p.then(function () { return walk(ch, prefix + entry.name + '/'); }); }, Promise.resolve()).then(res);
+              return;
+            }
+            all = all.concat(batch); more();
+          }, function () { res(); });
+        })();
+      });
+    }
+    return entries.reduce(function (p, en) { return p.then(function () { return walk(en, ''); }); }, Promise.resolve())
+      .then(function () { return out; });
+  }
+
   function addFiles(fileList) {
     var files = Array.from(fileList);
+    var load = 'Load ' + (++loadCount);
     var zips = files.filter(function (f) { return /\.zip$/i.test(f.name); });
     var imgs = files.filter(function (f) {
       return !/\.zip$/i.test(f.name) && (/image|jpe?g/i.test(f.type) || /\.(jpe?g|png|tiff?)$/i.test(f.name) || QDRaw.isRaw(f.name));
@@ -123,7 +174,10 @@
     if (zips.length) { zips.forEach(addZip); }
     if (!imgs.length) return;
     imgs.forEach(function (f) {
-      state.items.push(newItem(f.name, f, null));
+      var it = newItem(f.name, f, null);
+      // folder of a dropped / picked folder, else this load as one group
+      it.group = dirOf(f._relPath || f.webkitRelativePath) || load;
+      state.items.push(it);
     });
     render();
     startQueue();
@@ -149,7 +203,9 @@
       })).then(function (csvData) {
         state.csvs = csvData.filter(Boolean);
         imgEntries.forEach(function (e) {
-          state.items.push(newItem(e.name, e.blob, 'zip:' + e.path));
+          var zi = newItem(e.name, e.blob, 'zip:' + e.path);
+          zi.group = dirOf(e.path) || file.name.replace(/\.zip$/i, '');
+          state.items.push(zi);
         });
         setProgress(false);
         render();
@@ -239,6 +295,8 @@
       // stream: each photo joins the queue as soon as it is downloaded
       onItem: function (f) {
         var it = newItem(f.name, f.blob, f.driveId);
+        // Drive subfolder path below the pasted/picked folder
+        it.group = dirOf(f.path) || 'Drive folder';
         it.origin = 'drive-api';
         state.items.push(it);
         ui.grid.appendChild(QDGrid.render(it));
@@ -765,9 +823,19 @@
         + 'them — a manually adjusted crop is always included.');
       return;
     }
+    var meta = QDMetaTab.exportInfo();
+    if (meta) {
+      var miss = meta.missing(sel);
+      if (miss.length && !confirm('Metadata is incomplete for ' + miss.length + ' group(s):\n\n'
+          + miss.slice(0, 10).join('\n') + (miss.length > 10 ? '\n…' : '')
+          + '\n\nExport anyway? (Cancel opens the Metadata tab.)')) {
+        showTab('meta');
+        return;
+      }
+    }
     var skipped = state.items.length - sel.length;
     setProgress(true, 'Building ZIP…', null);
-    QDExport.exportZip(sel, state.items).then(function (size) {
+    QDExport.exportZip(sel, state.items, meta).then(function (size) {
       setProgress(false);
       alert(sel.length + ' crop' + (sel.length === 1 ? '' : 's') + ' exported.'
         + (skipped ? '\n\n' + skipped + ' image' + (skipped === 1 ? '' : 's')
@@ -781,6 +849,15 @@
     state.items = [];
     state.csvs = [];
     render();
+  }
+
+  function showTab(name) {
+    Array.prototype.forEach.call(document.querySelectorAll('.tabs [data-tab]'), function (b) {
+      b.classList.toggle('active', b.getAttribute('data-tab') === name);
+    });
+    el('photosPanel').hidden = name !== 'photos';
+    el('metaPanel').hidden = name !== 'meta';
+    if (name === 'meta') QDMetaTab.render();
   }
 
   function openSettings() {
