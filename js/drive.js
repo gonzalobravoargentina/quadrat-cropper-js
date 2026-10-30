@@ -77,7 +77,12 @@
     });
   }
 
-  var IMAGE_RE = /image\/(jpeg|jpg|png|tiff)/;
+  var IMAGE_RE = /image\/(jpeg|jpg|pjpeg|png|tiff)/i;
+  var IMAGE_EXT = /\.(jpe?g|png|tiff?)$/i;
+  var SHORTCUT_MIME = 'application/vnd.google-apps.shortcut';
+  /** Image by MIME type OR by extension: Drive sometimes stores camera JPEGs
+   * as application/octet-stream or with odd casing ("image/JPEG"). */
+  function isImage(f) { return IMAGE_RE.test(f.mimeType || '') || IMAGE_EXT.test(f.name || ''); }
 
   /** Open the Google Drive Picker; resolve with information about what was picked. */
   function pickFolder() {
@@ -89,6 +94,13 @@
             .setIncludeFolders(true)
             .setSelectFolderEnabled(true)
             .setMimeTypes('image/jpeg,image/png,image/tiff'))
+          // Shared drives: a separate tab + the SUPPORT_DRIVES feature, or
+          // folders in an organisation drive cannot be picked at all
+          .addView(new google.picker.DocsView(google.picker.ViewId.DOCS)
+            .setEnableDrives(true)
+            .setIncludeFolders(true)
+            .setSelectFolderEnabled(true))
+          .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
           .addView(google.picker.ViewId.DOCS)
           .setOAuthToken(tokenInfo.token)
           .setCallback(function (data) {
@@ -132,6 +144,11 @@
     return listChildren(folderId).then(function (children) {
       var files = [], subs = [];
       children.forEach(function (f) {
+        // follow Drive shortcuts to their target (folder or file)
+        if (f.mimeType === SHORTCUT_MIME && f.shortcutDetails) {
+          f = { id: f.shortcutDetails.targetId, name: f.name,
+                mimeType: f.shortcutDetails.targetMimeType };
+        }
         if (f.mimeType === FOLDER_MIME) subs.push(f);
         else { f.path = prefix + f.name; files.push(f); }
       });
@@ -153,7 +170,11 @@
     function onePage(q) {
       var u = new URL('https://www.googleapis.com/drive/v3/files');
       u.searchParams.set('q', "'" + folderId + "' in parents and trashed = false");
-      u.searchParams.set('fields', 'nextPageToken, files(id,name,mimeType,size)');
+      u.searchParams.set('fields', 'nextPageToken, files(id,name,mimeType,size,shortcutDetails)');
+      // Without these two flags files.list returns NOTHING for folders that
+      // live in a Shared drive (e.g. an organisation's MBON drive).
+      u.searchParams.set('supportsAllDrives', 'true');
+      u.searchParams.set('includeItemsFromAllDrives', 'true');
       u.searchParams.set('pageSize', '1000');
       if (pageToken) u.searchParams.set('pageToken', pageToken);
       return gfetch(u).then(function (r) {
@@ -170,7 +191,7 @@
 
   /** Download a Drive file as a Blob. */
   function downloadFile(fileId) {
-    return gfetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media')
+    return gfetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media&supportsAllDrives=true')
       .then(function (r) {
         if (!r.ok) return r.text().then(function (t) { throw new Error('Drive download failed: ' + r.status + ' ' + t.slice(0, 200)); });
         return r.blob();
@@ -227,7 +248,7 @@
     return ensureToken()
       .then(function () { return listFolder(folderId); })
       .then(function (files) {
-        var images = files.filter(function (f) { return IMAGE_RE.test(f.mimeType); });
+        var images = files.filter(isImage);
         var csvs = files.filter(function (f) { return /csv|text\/plain/.test(f.mimeType) || /\.csv$/i.test(f.name); });
         cbProgress && cbProgress('Found ' + images.length + ' images, ' + csvs.length + ' CSV(s)');
         return Promise.all(csvs.map(function (c) {
@@ -237,12 +258,19 @@
             return p;
           }).catch(function () { return null; });
         })).then(function (csvData) {
-          return { images: images, csvs: csvData };
+          return { images: images, csvs: csvData, all: files };
         });
       })
       .then(function (dec) {
         if (!dec.images.length) {
-          throw new Error('No JPEG/PNG/TIFF images found in this Drive folder (subfolders included).');
+          // say what WAS there, so the next report is diagnosable
+          var types = {};
+          var files = dec.all || [];
+          files.forEach(function (f) { types[f.mimeType] = (types[f.mimeType] || 0) + 1; });
+          var summary = Object.keys(types).map(function (t) { return types[t] + ' × ' + t; }).join('\n');
+          throw new Error('No JPEG/PNG/TIFF images found in this Drive folder (subfolders included).\n\n'
+            + (files.length ? 'Found ' + files.length + ' other file(s):\n' + summary
+                            : 'The folder listing came back empty — check that this account can open the folder.'));
         }
         var done = 0, out = [], failed = [];
         // Always return a Promise: the old version returned the plain `out`
