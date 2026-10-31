@@ -191,6 +191,17 @@
     </label>
     <p class="muted small">Keeps the yellow/green PVC rim out of the crop. Applies to
        photos processed after saving (default 5 %).</p>
+    <label>Crop size in the ZIP
+      <select id="cropSizeMode">
+        <option value="median">Same for all photos — median of the batch (recommended)</option>
+        <option value="fixed">Same for all photos — fixed size</option>
+        <option value="native">Each crop at its own size</option>
+      </select>
+      <input type="number" id="cropSizePx" min="200" max="4000" step="10" style="width:6em"> px
+    </label>
+    <p class="muted small">Every crop shows the same 25 × 25 cm, so a common size in px
+       means a common scale (px per cm) — crops become directly comparable.
+       The px box is used with "fixed size".</p>
     <div class="dialog-actions">
       <button value="cancel" formnovalidate>Cancel</button>
       <button id="btnSaveSettings" value="confirm" class="primary">Save</button>

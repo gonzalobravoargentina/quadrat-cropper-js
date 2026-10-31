@@ -384,7 +384,7 @@
   async function processInWorker(it, slot) {
     if (!it.meta) it.meta = QDMeta.joinMeta(it.name, state.csvs);
     if (!it.exif) it.exif = await QDExif.fromBlob(it.blob);
-    var r = await runInWorker(slot, { id: it.id, blob: it.blob, maxSide: 1600, maxMP: MAX_DETECT_MP, inset: getInset() });
+    var r = await runInWorker(slot, { id: it.id, blob: it.blob, maxSide: NATIVE_MAX, maxMP: MAX_DETECT_MP, inset: getInset() });
     if (r.error) throw new Error(r.error);
     var det = r.det;
     it.det = det;
@@ -400,6 +400,7 @@
       it.corners = det.quadFull.map(function (c) { return { x: c.x, y: c.y }; });
       it.source = 'auto';
       it.cropBlob = r.cropBlob;
+      it.cropSide = r.side;
       it.status = 'done';
     } else {
       it.status = 'failed';
@@ -668,6 +669,30 @@
   }
 
   /** Warp the source image through `quad` into a square JPEG blob + thumbnail. */
+  // Crops are warped at the square's own resolution (no more 1600-px cap,
+  // which downsampled the ~1700-px TG openings); the export then brings them
+  // all to one size (see cropSizeTarget).
+  var NATIVE_MAX = 4000;
+
+  /**
+   * Output size for every crop in the ZIP. Each crop shows the same 25 × 25 cm,
+   * so a common pixel size means a common scale (px/cm) across photos.
+   * 'median' (default): median crop side of the exported photos; a number:
+   * fixed side in px; 'native': each crop keeps its own size.
+   */
+  function getCropSize() {
+    var v = 'median';
+    try { v = localStorage.getItem('quadrat.cropSize') || 'median'; } catch (e) { /* private mode */ }
+    return v;
+  }
+  function cropSizeTarget(sel) {
+    var mode = getCropSize();
+    if (mode === 'native') return null;
+    if (/^\d+$/.test(mode)) return Math.max(200, Math.min(NATIVE_MAX, +mode));
+    var s = sel.map(function (it) { return it.cropSide; }).filter(Boolean).sort(function (a, b) { return a - b; });
+    return s.length ? s[Math.floor(s.length / 2)] : null;
+  }
+
   async function makeCrop(it, quad, source, maxSide) {
     var bmp = await createImageBitmap(it.blob, { imageOrientation: 'from-image' });
     var cvFull = document.createElement('canvas');
@@ -690,6 +715,7 @@
     it.cropBlob = await new Promise(function (res) {
       outCv.toBlob(function (b) { res(b); }, 'image/jpeg', 0.92);
     });
+    it.cropSide = side;
     it.thumbURL = thumbDataUrl(outCv, 340);
     it.cropCanvas = null; // release the full crop canvas (blob retained)
   }
@@ -700,7 +726,7 @@
       return Math.hypot(b.x - a.x, b.y - a.y);
     });
     var mean = lens.reduce(function (a, b) { return a + b; }, 0) / 4;
-    var side = Math.round(Math.min(maxSide || 1600, Math.max(500, mean)));
+    var side = Math.round(Math.min(maxSide || NATIVE_MAX, Math.max(500, mean)));
     return side;
   }
 
@@ -858,7 +884,7 @@
     }
     var skipped = state.items.length - sel.length;
     setProgress(true, 'Building ZIP…', null);
-    QDExport.exportZip(sel, state.items, meta).then(function (size) {
+    QDExport.exportZip(sel, state.items, meta, { side: cropSizeTarget(sel) }).then(function (size) {
       setProgress(false);
       alert(sel.length + ' crop' + (sel.length === 1 ? '' : 's') + ' exported.'
         + (skipped ? '\n\n' + skipped + ' image' + (skipped === 1 ? '' : 's')
@@ -886,11 +912,18 @@
   function openSettings() {
     ui.clientIdInput.value = QDDrive.getClientId();
     el('insetInput').value = getInset();
+    var cs = getCropSize();
+    el('cropSizeMode').value = /^\d+$/.test(cs) ? 'fixed' : cs;
+    el('cropSizePx').value = /^\d+$/.test(cs) ? cs : 1600;
     ui.settingsDialog.showModal();
   }
   function saveSettings() {
     QDDrive.setConfig(ui.clientIdInput.value, QDDrive.getApiKey());
     try { localStorage.setItem('quadrat.inset', String(Math.max(0, Math.min(20, +el('insetInput').value || 0)))); } catch (e) { /* private mode */ }
+    try {
+      var m = el('cropSizeMode').value;
+      localStorage.setItem('quadrat.cropSize', m === 'fixed' ? String(Math.round(+el('cropSizePx').value || 1600)) : m);
+    } catch (e) { /* private mode */ }
     ui.settingsDialog.close();
   }
 

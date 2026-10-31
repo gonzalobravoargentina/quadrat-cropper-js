@@ -75,7 +75,23 @@
    * excluded shots are never silently dropped.
    * item shape: { id, name, cropBlob|null, conf, ok, flags, meta, exif, source, corners, driveId, status }
    */
-  function exportZip(items, manifestItems, meta) {
+  /** Resize a square JPEG crop to side × side (high-quality resample). */
+  function resizeCrop(blob, side) {
+    return createImageBitmap(blob, { resizeWidth: side, resizeHeight: side, resizeQuality: 'high' })
+      .then(function (bmp) {
+        var cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(side, side)
+          : Object.assign(document.createElement('canvas'), { width: side, height: side });
+        cv.getContext('2d').drawImage(bmp, 0, 0);
+        bmp.close && bmp.close();
+        return cv.convertToBlob ? cv.convertToBlob({ type: 'image/jpeg', quality: 0.92 })
+          : new Promise(function (res) { cv.toBlob(res, 'image/jpeg', 0.92); });
+      });
+  }
+
+  function exportZip(items, manifestItems, meta, opts) {
+    // opts.side: one output size (px) for every crop, or null to keep each
+    // crop's own size (see cropSizeTarget in app.js)
+    var outSide = opts && opts.side ? opts.side : null;
     manifestItems = manifestItems || items;
     // meta (from QDMetaTab.exportInfo(), null when the preset is "None"):
     // crops are named like the source photo (CoralNet matches the CSV's
@@ -96,7 +112,8 @@
       var fileName = '';
       if (inZip[it.id]) {
         fileName = base + '.jpg';
-        if (it.cropBlob) entries.push({ name: fileName, blob: it.cropBlob, exif: meta ? meta.exifFor(it) : null });
+        if (it.cropBlob) entries.push({ name: fileName, blob: it.cropBlob, exif: meta ? meta.exifFor(it) : null,
+                                        resize: outSide && it.cropSide && it.cropSide !== outSide ? outSide : null });
         else if (it.warpData) entries.push({ name: fileName, data: it.warpData });
         else fileName = '';
       }
@@ -115,7 +132,9 @@
         (it.exif && it.exif.model) || '',
         (it.exif && (it.exif.dateTimeOriginal || it.exif.modifyDate)) || '',
         it.driveId || '',
-        (root.QDMetaTab && root.QDMetaTab.groupOf(it)) || ''
+        (root.QDMetaTab && root.QDMetaTab.groupOf(it)) || '',
+        it.cropSide || '',
+        fileName ? (outSide || it.cropSide || '') : ''
       ];
       if (meta && fileName) metaLines.push(root.QDMeta.csvRow(meta.rowFor(it, fileName)));
       metaCols.forEach(function (c) { row.push((it.meta && it.meta.csv && it.meta.csv[c]) || ''); });
@@ -123,7 +142,7 @@
     });
 
     var header = ['file', 'status', 'confidence', 'flags', 'source', 'date', 'site', 'group', 'code',
-      'exif_make', 'exif_model', 'exif_datetime', 'drive_file_id', 'group'].concat(metaCols);
+      'exif_make', 'exif_model', 'exif_datetime', 'drive_file_id', 'group', 'square_side_px', 'output_px'].concat(metaCols);
     var lines = [root.QDMeta.csvRow(header)].concat(rows.map(function (r) { return root.QDMeta.csvRow(r); }));
     var manifest = new TextEncoder().encode(lines.join('\r\n') + '\r\n');
     entries.push({ name: 'manifest.csv', data: manifest });
@@ -143,7 +162,8 @@
     return entries.reduce(function (p, e) {
       return p.then(function () {
         if (!e.blob) { ready.push({ name: e.name, data: e.data }); return; }
-        return e.blob.arrayBuffer().then(function (b) {
+        var src = e.resize ? resizeCrop(e.blob, e.resize) : Promise.resolve(e.blob);
+        return src.then(function (blob) { e.blob = blob; return blob.arrayBuffer(); }).then(function (b) {
           var bytes = new Uint8Array(b), part = e.blob;
           if (e.exif && root.QDExifWrite) {
             bytes = root.QDExifWrite.embed(bytes, e.exif);

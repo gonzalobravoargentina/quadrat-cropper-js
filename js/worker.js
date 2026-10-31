@@ -22,7 +22,7 @@ function sideForQuad(q, maxSide) {
     var a = q[i], b = q[(i + 1) % 4];
     mean += Math.hypot(b.x - a.x, b.y - a.y) / 4;
   }
-  return Math.round(Math.min(maxSide || 1600, Math.max(500, mean)));
+  return Math.round(Math.min(maxSide || 4000, Math.max(500, mean)));
 }
 
 /** Small, structured-clone-friendly copy of the detection (drops pixel buffers). */

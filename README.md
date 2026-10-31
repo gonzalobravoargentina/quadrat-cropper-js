@@ -121,7 +121,11 @@ ones you excluded with ✕. Red/amber
 thumbnails can be fixed in the editor to qualify. The
 `quadrat-crops-<timestamp>.zip` contains:
 
-- `<name>_crop.jpg` square crops (cap 1600 px square)
+- square crops, **all the same size in px** by default (the median crop
+  size of the batch; a fixed size or each crop's own size can be chosen in
+  **⚙**). Every crop shows the same 25 × 25 cm, so one size = one scale
+  (px per cm) for the whole batch. Crops are warped at the opening's own
+  resolution (no 1600-px cap any more)
 - `manifest.csv` — every image that was loaded, with filename, status,
   confidence, flags, date/site/group/code parsed from filenames, EXIF
   (make/model/date), Drive file id, and any columns joined from CSVs found in
@@ -343,5 +347,5 @@ tools/qdbg.js       per-stage detector diagnostics for one or more images
 - Chile/northern-Hemisphere dark rock shots with heavy algae: the opening
   probe and confidence weighting flag them for review; manual markers are the
   intended fallback.
-- Export crops are capped at 1600 px square, matching the light gray `s190`
-  preview convention of the reference outputs.
+- Crops are warped at the opening's native resolution and brought to one
+  common size at export (median of the batch by default).
