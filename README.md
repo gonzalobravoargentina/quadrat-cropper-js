@@ -331,6 +331,12 @@ tools/test.js       visual debug harness — overlays, crops, summary.json
 tools/qdbg.js       per-stage detector diagnostics for one or more images
 ```
 
+## Change history
+
+The field-review changes from v1.5.3 to v1.12.0 (why, what, where, how
+tested) are explained in
+[`docs/CHANGES-1.5.3-to-1.12.0.md`](docs/CHANGES-1.5.3-to-1.12.0.md).
+
 ## Notes & limitations
 
 - Anonymous Drive access: a single publicly-shared **image** link loads with
