@@ -110,6 +110,7 @@
       while (seen[base.toLowerCase() + '.jpg']) { base = dupBase + '_' + n++; }
       seen[base.toLowerCase() + '.jpg'] = true;
       var fileName = '';
+      var pos = root.QDGeo ? root.QDGeo.position(it) : null;
       if (inZip[it.id]) {
         fileName = base + '.jpg';
         if (it.cropBlob) entries.push({ name: fileName, blob: it.cropBlob, exif: meta ? meta.exifFor(it) : null,
@@ -134,7 +135,12 @@
         it.driveId || '',
         (root.QDMetaTab && root.QDMetaTab.groupOf(it)) || '',
         it.cropSide || '',
-        fileName ? (outSide || it.cropSide || '') : ''
+        fileName ? (outSide || it.cropSide || '') : '',
+        // position: camera EXIF GPS or set in the Map tab (geo.js)
+        pos ? +pos.latitude.toFixed(8) : '',
+        pos ? +pos.longitude.toFixed(8) : '',
+        pos ? (pos.source === 'track' && it.geo && it.geo.dt != null
+          ? 'track (±' + Math.round(it.geo.dt) + ' s)' : pos.source) : ''
       ];
       if (meta && fileName) metaLines.push(root.QDMeta.csvRow(meta.rowFor(it, fileName)));
       metaCols.forEach(function (c) { row.push((it.meta && it.meta.csv && it.meta.csv[c]) || ''); });
@@ -142,7 +148,8 @@
     });
 
     var header = ['file', 'status', 'confidence', 'flags', 'source', 'date', 'site', 'group', 'code',
-      'exif_make', 'exif_model', 'exif_datetime', 'drive_file_id', 'group', 'square_side_px', 'output_px'].concat(metaCols);
+      'exif_make', 'exif_model', 'exif_datetime', 'drive_file_id', 'group', 'square_side_px', 'output_px',
+      'latitude', 'longitude', 'gps_source'].concat(metaCols);
     var lines = [root.QDMeta.csvRow(header)].concat(rows.map(function (r) { return root.QDMeta.csvRow(r); }));
     var manifest = new TextEncoder().encode(lines.join('\r\n') + '\r\n');
     entries.push({ name: 'manifest.csv', data: manifest });

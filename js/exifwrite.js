@@ -25,9 +25,10 @@
   function asciiBytes(s) { return Array.from(enc.encode(String(s))).concat([0]); }
 
   function rationalDMS(deg) {
-    deg = Math.abs(deg);
-    var d = Math.floor(deg), mFloat = (deg - d) * 60, m = Math.floor(mFloat);
-    var s = Math.round((mFloat - m) * 60 * 10000);
+    // work in integer 1/10000 s so float noise (44.9 → 44°53'59.99999")
+    // cannot produce 60" — it carries into the minutes/degrees instead
+    var t = Math.round(Math.abs(deg) * 3600 * 10000);
+    var d = Math.floor(t / 36000000), m = Math.floor((t % 36000000) / 600000), s = t % 600000;
     return [[d, 1], [m, 1], [s, 10000]];
   }
 

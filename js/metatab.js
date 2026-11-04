@@ -261,12 +261,14 @@
   function rowFor(it, name) {
     var p = preset(); if (!p) return null;
     var g = valuesFor(groupOf(it)), d = exifDate(it);
+    // camera GPS, or a position set in the Map tab (geo.js decides)
+    var pos = root.QDGeo ? root.QDGeo.position(it) : null;
     var vals = {
       Name: name,
       Date: d ? d.slice(0, 10).replace(/:/g, '-') : '',
       // 8 decimals ≈ 1 mm: drops float noise like -54.858760000000004
-      Latitude: it.exif && it.exif.latitude != null ? String(+it.exif.latitude.toFixed(8)) : '',
-      Longitude: it.exif && it.exif.longitude != null ? String(+it.exif.longitude.toFixed(8)) : '',
+      Latitude: pos ? String(+pos.latitude.toFixed(8)) : '',
+      Longitude: pos ? String(+pos.longitude.toFixed(8)) : '',
       Camera: (it.exif && it.exif.model) || ''
     };
     Object.keys(p.fixed).forEach(function (k) { vals[k] = p.fixed[k]; });
@@ -277,6 +279,7 @@
   /** EXIF block for one crop: camera date/GPS/model + this group's fields. */
   function exifFor(it) {
     var p = preset(), g = p ? valuesFor(groupOf(it)) : {};
+    var pos = root.QDGeo ? root.QDGeo.position(it) : null;
     var desc = [];
     if (p) {
       p.fields.forEach(function (f) { var v = fieldValue(p, g, f.key); if (v) desc.push(f.key + '=' + v); });
@@ -285,7 +288,7 @@
     return {
       make: it.exif && it.exif.make, model: it.exif && it.exif.model,
       dateTimeOriginal: exifDate(it),
-      latitude: it.exif ? it.exif.latitude : null, longitude: it.exif ? it.exif.longitude : null,
+      latitude: pos ? pos.latitude : null, longitude: pos ? pos.longitude : null,
       artist: (p && fieldValue(p, g, 'Photographer')) || '', description: desc.join('; ')
     };
   }

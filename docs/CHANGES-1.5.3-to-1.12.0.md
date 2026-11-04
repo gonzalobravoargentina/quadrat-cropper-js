@@ -46,6 +46,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.10.0 | Detector: turquoise/cyan pass for the mint frame as rendered by TG-6/TG-7 | §3 |
 | 1.11.0 | Detector: frames that fill the shot + white rod frames | §3 |
 | 1.12.0 | Same output size for every crop in the ZIP | §8 |
+| 1.13.0 | Map tab: photo positions, place by click, GPS-track merge by time | §15 |
 
 ---
 
@@ -67,6 +68,9 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | `js/unzip.js` | changed | UTF-8 entry names. |
 | `js/grid.js` | changed | `adjusted` (blue), `excluded` (grey) and neutral queued tiers; ✕/↺ button; stats. |
 | `index.html`, `css/styles.css` | changed | Add menu, folder input, tabs, Metadata panel, settings, floating progress, legend. |
+| `js/geo.js` | **new** (1.13) | GPS helpers without DOM: GPX/KML/CSV track parsing, camera time → UTC, time matching, `position(it)`. |
+| `js/maptab.js` | **new** (1.13) | Map tab UI on Leaflet. |
+| `vendor/leaflet-1.9.4/` | **new** (1.13) | Leaflet (BSD-2), unmodified `dist/` files, loaded lazily. |
 | `README.md` | changed | User-facing documentation of everything below. |
 
 ---
@@ -354,6 +358,8 @@ used to build that CSV by hand for thousands of photos.
 | `quadrat.cropSize` | `median` / `native` / px number | `median` |
 | `quadrat.lockSquare` | Editor Keep square | on |
 | `quadrat.meta.v2` | Preset, name format, last values, learned localities | intertidal, date prefix |
+| `quadrat.gpsMerge` | Map tab: camera / CSV time zone, use EXIF zone, clock offset, max gap, end tolerance, overwrite, basemap | browser zone, on, —, 60 s, 30 s, off, Sentinel-2 |
+| `quadrat.arcgisKey` | Optional ArcGIS API key (Esri World Imagery) | none |
 | `quadrat.clientId`, `quadrat.welcomed` | unchanged | |
 
 ---
@@ -417,3 +423,91 @@ used to build that CSV by hand for thousands of photos.
 - **Public single-photo Drive links** are fetched through
   `lh3.googleusercontent.com`, which likely strips EXIF, and the original
   name is lost (`drive_<id>.jpg`).
+
+---
+
+## 15. Map tab (v1.13.0, part 8 of the stack)
+
+**Why:** the team needs every photo positioned for the CoralNet CSV and for
+OBIS. Some cameras have no GPS (or lose it underwater), and subtidal teams
+log a track with a handheld GPS on the surface buoy. Requested: (1) see the
+photos on a freely usable satellite map; (2) give a position to photos
+without one, by clicking on the map or by merging a GPS file by time, as
+CSIRO's iBenthos geotagging tool does.
+
+**What:**
+- **Map** (`maptab.js`, Leaflet 1.9.4 vendored, loaded on first open). Colour
+  = source: camera EXIF / GPS track / placed on the map. Popup: thumbnail,
+  camera time, UTC, coordinates, *Move…*, *Remove position* or *Back to camera
+  GPS*.
+- **Basemaps** — chosen for licence, not only looks:
+  - Sentinel-2 cloudless (EOX): no key; free for non-commercial use with
+    attribution (CC BY-NC-SA 4.0). 10 m pixels, so it shows the site, not the
+    quadrat. If the 2024 layer is not served, it falls back to 2020.
+  - Esri World Imagery: sub-metre, but Esri's terms require an API key outside
+    Esri's own apps, so it is offered only when a (free) ArcGIS Location
+    Platform key is set in ⚙.
+  - OpenStreetMap: place names.
+- **Place by click:** list of photos without a position (thumbnails, folder
+  filter, select all). The next map click positions the ticked photos.
+- **Merge a GPS track by time** (`geo.js`). This is a re-implementation of the
+  iBenthos method (LGPL tool, no code copied):
+  - Track formats:
+    - GPX: `trkpt`, `rtept` and `wpt` with `<time>`.
+    - KML: `gx:Track`, or Placemarks with a TimeStamp.
+    - CSV/TXT: columns for lat, lon and either one date-time column or
+      separate date and time columns. Delimiter `;`, tab or `,`; decimal commas
+      accepted; ISO or day-first dates; a time-zone selector for times written
+      without a zone.
+  - **Photo time → UTC:** the camera writes local wall-clock time with no
+    zone. The zone comes from a selector (default: the browser's zone), or
+    from EXIF `OffsetTimeOriginal` when the camera wrote it. EXIF
+    `SubSecTimeOriginal` is used when present. `exif.js` now reads these
+    three tags.
+  - **Clock offset:** typed as ±hh:mm:ss, or computed from a **photo of the
+    GPS screen**: the user picks it and types the time the GPS shows (and the
+    zone it shows time in). Offset = GPS UTC − camera UTC.
+  - **Matching:** binary search in the sorted track.
+    - Linear interpolation between the two fixes around the photo time, if
+      they are at most *Max gap* apart (default 60 s).
+    - Inside a larger gap, only a fix within *Tolerance* (30 s) of the photo
+      time is accepted. Before or after the track, the end fix is used within
+      the same tolerance.
+    - Anything else is rejected with a reason ("before the track", "in a gap
+      of the track…"). When nothing matches, the preview prints a photo's UTC
+      time next to the track's span, so a wrong zone or offset is obvious.
+  - *Preview* draws the would-be positions (dashed) and the track (yellow);
+    *Apply* commits them. Only photos without a position change, unless
+    *also replace the camera's own GPS* is ticked. Hand-placed positions are
+    never overwritten.
+- **Where positions go:**
+  - `it.geo = {lat, lon, source: 'map'|'track', dt, gap, track}`.
+  - `QDGeo.position(it)` returns it, or else the EXIF GPS. `metatab.js`
+    (CoralNet `Latitude`/`Longitude` and crop EXIF) and `export.js` read it.
+  - `manifest.csv` gains `latitude`, `longitude` and `gps_source`
+    (`exif`, `map` or `track (±N s)`).
+- **Fixed on the way:** `exifwrite.js` could write 60 seconds of arc
+  (44.9° → 44°53'60") because of float noise. It now works in integer
+  1/10000 s and carries over.
+
+**Tested** (headless Chromium, real UI). The test batch was 2 photos with
+camera GPS plus 6 without, one of them a "GPS screen" photo. The track was a
+synthetic GPX with 5 s fixes; the camera was set to UTC−3 and 90 s slow.
+- Without an offset, 5 of 6 photos matched (1 after the track). The reference
+  photo gave an offset of +00:01:30. Apply then put each photo at the
+  expected interpolated longitude.
+- The photo outside the track was placed by click, then removed again from
+  its popup.
+- In the exported ZIP, the CSV, the manifest and the crops' EXIF carry the
+  positions.
+- Unit checks in the page: zone and offset parsing, ISO / zoned / zoneless /
+  epoch times, KML (both forms), CSV (`date;time` with decimal commas, ISO
+  with Z), interpolation, end tolerance, gap rejection, and EXIF zone plus
+  sub-seconds.
+- Map tiles could not be fetched in the test environment (no outside
+  network). **Check the basemaps by eye with `make preview`.**
+
+**Open:** clustering if a batch has thousands of points at one site (a
+canvas renderer is used, so it stays fast, but overlapping markers stack);
+per-folder time zones (one zone per merge for now).
+

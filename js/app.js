@@ -107,6 +107,7 @@
     }
     // Photos | Metadata tabs
     QDMetaTab.init({ getItems: function () { return state.items; }, onChange: function () {} });
+    QDMapTab.init({ getItems: function () { return state.items; }, onChange: function () {} });
     Array.prototype.forEach.call(document.querySelectorAll('.tabs [data-tab]'), function (b) {
       b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); });
     });
@@ -343,6 +344,7 @@
       status: 'queued', ok: false, conf: 0, det: null,
       corners: null, source: 'auto', flags: [], reason: null,
       cropBlob: null, thumbURL: null, meta: null, exif: null,
+      geo: null,            // position set in the Map tab (geo.js position())
       fullDataKept: false
     };
   }
@@ -830,6 +832,7 @@
   }
 
   function renderStats() {
+    QDMapTab.refresh();          // no-op unless the Map tab is open (debounced)
     var n = QDGrid.updateStats(state.items);
     var ok = n.auto, review = n.review, manual = n.manual, failed = n.failed;
     var adjusted = n.adjusted || 0;
@@ -906,7 +909,9 @@
     });
     el('photosPanel').hidden = name !== 'photos';
     el('metaPanel').hidden = name !== 'meta';
+    el('mapPanel').hidden = name !== 'map';
     if (name === 'meta') QDMetaTab.render();
+    if (name === 'map') QDMapTab.show();
   }
 
   function openSettings() {
@@ -915,6 +920,7 @@
     var cs = getCropSize();
     el('cropSizeMode').value = /^\d+$/.test(cs) ? 'fixed' : cs;
     el('cropSizePx').value = /^\d+$/.test(cs) ? cs : 1600;
+    try { el('arcgisKeyInput').value = localStorage.getItem('quadrat.arcgisKey') || ''; } catch (e) { /* private mode */ }
     ui.settingsDialog.showModal();
   }
   function saveSettings() {
@@ -923,6 +929,11 @@
     try {
       var m = el('cropSizeMode').value;
       localStorage.setItem('quadrat.cropSize', m === 'fixed' ? String(Math.round(+el('cropSizePx').value || 1600)) : m);
+    } catch (e) { /* private mode */ }
+    try {
+      var k = el('arcgisKeyInput').value.trim(), old = localStorage.getItem('quadrat.arcgisKey') || '';
+      if (k) localStorage.setItem('quadrat.arcgisKey', k); else localStorage.removeItem('quadrat.arcgisKey');
+      if (k !== old) QDMapTab.resetBaseLayers();
     } catch (e) { /* private mode */ }
     ui.settingsDialog.close();
   }

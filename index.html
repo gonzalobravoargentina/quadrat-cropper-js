@@ -37,6 +37,7 @@
   <nav class="tabs" role="tablist">
     <button type="button" data-tab="photos" class="active" role="tab">Photos</button>
     <button type="button" data-tab="meta" role="tab">Metadata</button>
+    <button type="button" data-tab="map" role="tab">Map</button>
   </nav>
 </header>
 
@@ -58,6 +59,73 @@
   </div>
   <section id="grid" class="grid"></section>
  </div>
+ <!-- Map tab (js/maptab.js): photo positions on a satellite map; place
+      photos without GPS by clicking, or merge a GPS track by time -->
+ <section id="mapPanel" class="map-panel" hidden>
+  <aside class="map-side">
+    <p id="mapStats" class="map-stats"></p>
+    <p class="legend small">
+      <span class="dot" style="background:#2e9e5b"></span> camera GPS
+      <span class="dot" style="background:#1f8fd6"></span> GPS track
+      <span class="dot" style="background:#e8891a"></span> placed on the map
+      <button id="btnMapFit" type="button" class="linklike">zoom to photos</button>
+    </p>
+
+    <details open>
+      <summary>Place photos by clicking on the map</summary>
+      <p id="mapPlaceHint" class="small"></p>
+      <div class="map-list-head">
+        <label hidden>Folder <select id="mapGroupFilter"></select></label>
+        <button id="btnMapSelectAll" type="button">Select all</button>
+        <button id="btnMapSelectNone" type="button">None</button>
+      </div>
+      <div id="mapNoGps" class="map-list"></div>
+    </details>
+
+    <details>
+      <summary>Geotag from a GPS track (match by time)</summary>
+      <p class="small muted">A track logged by a handheld GPS or phone while the
+         photos were taken. Each photo gets the position the GPS had at the moment
+         of the shot. Only photos without a position are changed.</p>
+      <label class="block">GPS track file (.gpx, .kml, .csv)
+        <input type="file" id="gpsTrackFile" accept=".gpx,.kml,.csv,.txt"></label>
+      <p id="gpsTrackInfo" class="small"></p>
+      <label class="block" id="gpsCsvTzRow" hidden>Time zone of the CSV times (when they have none)
+        <select id="gpsCsvTz"></select></label>
+      <label class="block">Time zone the camera clock was set to
+        <select id="gpsCamTz"></select></label>
+      <label class="block small"><input type="checkbox" id="gpsUseExifTz">
+        use the time zone stored in the photo when the camera wrote one</label>
+      <label class="block">Camera clock offset
+        <input type="text" id="gpsOffset" placeholder="+00:00:00" style="width:8em">
+        <span class="small muted">added to the camera time (±hh:mm:ss)</span></label>
+      <details class="ref">
+        <summary>Compute the offset from a photo of the GPS screen</summary>
+        <p class="small muted">Photograph the GPS showing its clock with the same
+           camera (before or after the dive/transect). Pick that photo and type
+           the time the GPS shows in it.</p>
+        <label class="block">Photo <select id="gpsRefPhoto"></select></label>
+        <label class="block">Time on the GPS screen
+          <input type="datetime-local" id="gpsRefTime" step="1"></label>
+        <label class="block">The GPS shows time in <select id="gpsRefTz"></select></label>
+        <button id="btnGpsRefCompute" type="button">Compute offset</button>
+        <p id="gpsRefResult" class="small"></p>
+      </details>
+      <div class="map-row small">
+        <label>Max gap between fixes <input type="number" id="gpsMaxGap" min="1" step="1" style="width:5em"> s</label>
+        <label>Tolerance at the ends <input type="number" id="gpsEdgeTol" min="0" step="1" style="width:5em"> s</label>
+      </div>
+      <label class="block small"><input type="checkbox" id="gpsOverwrite">
+        also replace the camera's own GPS (never positions placed by hand)</label>
+      <div class="map-row">
+        <button id="btnGpsPreview" type="button" disabled>Preview</button>
+        <button id="btnGpsApply" type="button" class="primary" disabled>Apply</button>
+      </div>
+      <p id="gpsResult" class="small"></p>
+    </details>
+  </aside>
+  <div id="mapView" class="map-view"></div>
+ </section>
  <section id="metaPanel" class="meta-panel" hidden>
   <div class="meta-head">
     <label>Project preset <select id="metaPreset"></select></label>
@@ -199,6 +267,12 @@
       </select>
       <input type="number" id="cropSizePx" min="200" max="4000" step="10" style="width:6em"> px
     </label>
+    <label class="block">ArcGIS API key (optional, Map tab)
+      <input type="text" id="arcgisKeyInput" spellcheck="false" autocomplete="off" placeholder="AAPK…">
+    </label>
+    <p class="muted small">Adds high-resolution Esri World Imagery to the Map tab.
+       Free key from an ArcGIS Location Platform account (privilege: basemaps).
+       Without it the map uses Sentinel-2 cloudless (10 m) and OpenStreetMap.</p>
     <p class="muted small">Every crop shows the same 25 × 25 cm, so a common size in px
        means a common scale (px per cm) — crops become directly comparable.
        The px box is used with "fixed size".</p>
@@ -281,6 +355,8 @@
 <script src="js/editor.js"></script>
 <script src="js/exifwrite.js"></script>
 <script src="js/metatab.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/maptab.js"></script>
 <script src="js/export.js"></script>
 <script src="js/app.js"></script>
 </body>

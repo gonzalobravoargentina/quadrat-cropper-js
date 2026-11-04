@@ -63,3 +63,8 @@ every `crop` fixture; keep it that way when touching the pipeline.
   original later (editor, re-export) must call `ensureBlob(it)`.
 - **Crops are warped at native resolution** (cap `NATIVE_MAX`) and resized to
   a common side only at export (`QDExport.exportZip(..., { side })`).
+- **Positions:** read them through `QDGeo.position(it)` (map/track position in
+  `it.geo` wins over the camera's EXIF GPS). The CoralNet CSV, the crops' EXIF
+  and `manifest.csv` all do; never read `it.exif.latitude` directly for output.
+- **Leaflet is vendored** (`vendor/leaflet-1.9.4/`) and loaded lazily by
+  `maptab.js`; the page itself must keep working without it.

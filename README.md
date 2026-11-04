@@ -185,6 +185,45 @@ Canon CR2 — only embed a reduced preview; those photos are flagged ("reduced
 resolution"). If detail matters for annotation, export full-size JPEGs from
 the RAW files first (camera software, Lightroom, darktable…).
 
+### Map tab — where the photos were taken
+
+The **Map** tab shows every photo that has a position on a satellite map
+(green = the camera's own GPS, blue = from a GPS track, orange = placed by
+hand). Click a marker for the thumbnail, time and coordinates; **Move…**
+re-places it with the next click on the map. Photos without a position are
+listed on the left; there are two ways to give them one:
+
+1. **Click on the map.** Tick one or more photos (or *Select all*, optionally
+   filtered by folder), then click where they were taken. Handy when a whole
+   site shares one point.
+2. **Merge a GPS track by time** (the method of CSIRO's
+   [iBenthos geotagging tool](https://github.com/csiro/ibenthos-geotagging-tool)).
+   Load the track logged by a handheld GPS or phone while photographing
+   (`.gpx`, `.kml` with `gx:Track` or timestamped placemarks, or `.csv`
+   with time + lat + lon columns). Set the **time zone the camera clock was
+   set to** (or let the app use the zone the camera stored in the photo, when
+   there is one). If the camera clock was not synchronised with the GPS,
+   give the **camera clock offset**, or compute it from a **photo of the GPS
+   screen**: pick that photo and type the time the GPS showed. *Preview*
+   shows how many photos fall on the track (and why the others don't);
+   *Apply* writes the positions. Each photo gets the position interpolated
+   between the two fixes around its time, as long as they are at most *Max gap*
+   seconds apart (default 60 s); photos up to *Tolerance at the ends*
+   (default 30 s) before/after the track take its first/last fix.
+   Only photos without a position are changed unless you tick *also replace
+   the camera's own GPS*; hand-placed positions are never overwritten.
+
+Positions set here go into the CoralNet CSV (`Latitude`, `Longitude`), the
+EXIF of every exported crop, and `manifest.csv` (`latitude`, `longitude`,
+`gps_source`).
+
+Basemaps: **Sentinel-2 cloudless** (EOX, 10 m, no key; free for
+non-commercial use with attribution, CC BY-NC-SA 4.0) and **OpenStreetMap**.
+For sub-metre satellite imagery add a free **ArcGIS Location Platform API
+key** in ⚙ — the map then offers **Esri World Imagery**. The map library
+(Leaflet 1.9.4, BSD-2) is vendored in `vendor/` and loaded only when the tab
+is first opened.
+
 ## Google Drive sign-in (only for auto-listing whole folders)
 
 Anonymous paths cover single photo links and folder .zip drops. Only *listing*
@@ -315,6 +354,9 @@ js/app.js           orchestration, worker-pool queue, square-crop checks, ingest
 js/worker.js        per-photo pipeline in a Web Worker (decode → detect → square → warp → encode)
 js/raw.js           camera RAW support (largest embedded JPEG + RAW EXIF)
 js/metatab.js       Metadata tab: presets, per-folder groups, CoralNet CSV rows
+js/maptab.js        Map tab: Leaflet map, place-by-click, GPS-track merge UI
+js/geo.js           GPS helpers (no DOM, Node-loadable): GPX/KML/CSV tracks,
+                    camera time → UTC, time matching, position precedence
 js/exifwrite.js     writes EXIF (date, GPS, camera, fields) into the exported crops
 js/grid.js          thumbnail grid + confidence ring highlighting
 js/editor.js        manual corner-marker editor + live crop preview
@@ -325,6 +367,7 @@ js/unzip.js         in-browser ZIP reader (STORE + DEFLATE via DecompressionStre
 js/export.js        ZIP writer (STORE), manifest CSV, review.json
 js/exif.js          minimal EXIF reader incl. GPS (JPEG + TIFF-based RAW headers)
 js/metadata.js      filename parsing (date/site/group/code) + CSV join
+vendor/leaflet-1.9.4/  map library (BSD-2), loaded lazily by the Map tab
 tests/run.js        regression suite (npm test; also run by CI)
 tests/images/       captured fixtures + expected.json
 tools/test.js       visual debug harness — overlays, crops, summary.json

@@ -14,7 +14,12 @@
   };
   var EXIF_TAGS = {
     0x9003: { key: 'dateTimeOriginal', type: 'ascii' },
-    0x9004: { key: 'dateTimeDigitized', type: 'ascii' }
+    0x9004: { key: 'dateTimeDigitized', type: 'ascii' },
+    // used by the Map tab's GPS-track merge (geo.js): the camera's UTC
+    // offset and sub-second part, when the camera writes them
+    0x9010: { key: 'offsetTime', type: 'ascii' },
+    0x9011: { key: 'offsetTimeOriginal', type: 'ascii' },
+    0x9291: { key: 'subSecTimeOriginal', type: 'ascii' }
   };
 
   function readString(view, dv, offset, len) {
