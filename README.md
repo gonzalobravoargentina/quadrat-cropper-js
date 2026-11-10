@@ -175,6 +175,10 @@ information in every crop's **EXIF** (date, GPS, make/model, photographer as
 Artist, the group fields in ImageDescription/UserComment). Export warns when
 a required field is empty. Choose *None* as preset to skip all of this.
 
+To fix metadata without re-exporting the crops, use **⬇ Download metadata.csv**
+in the Metadata tab: it downloads only the CSV, with exactly the file names
+the ZIP would have, ready to upload to CoralNet again.
+
 ### RAW files
 
 Browsers cannot decode RAW sensor data, so the app uses the **largest JPEG

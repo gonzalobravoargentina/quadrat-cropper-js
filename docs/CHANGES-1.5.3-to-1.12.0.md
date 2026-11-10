@@ -47,6 +47,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.11.0 | Detector: frames that fill the shot + white rod frames | §3 |
 | 1.12.0 | Same output size for every crop in the ZIP | §8 |
 | 1.13.0 | Map tab: photo positions, place by click, GPS-track merge by time | §15 |
+| 1.14.0 | Metadata tab: download only the metadata CSV | §16 |
 
 ---
 
@@ -510,4 +511,30 @@ synthetic GPX with 5 s fixes; the camera was set to UTC−3 and 90 s slow.
 **Open:** clustering if a batch has thousands of points at one site (a
 canvas renderer is used, so it stays fast, but overlapping markers stack);
 per-folder time zones (one zone per merge for now).
+
+---
+
+## 16. Download only the metadata CSV (v1.14.0, part 9 of the stack)
+
+**Why:** after uploading to CoralNet, the field team sometimes finds errors
+in the metadata (a wrong site or photographer). They fix them in the
+Metadata tab, but then had to export the whole ZIP, crops included, just to
+get the corrected CSV.
+
+**What:**
+- **⬇ Download metadata.csv** button, visible only in the Metadata tab.
+  It downloads the preset's CSV on its own as
+  `metadata_coralnet-<timestamp>.csv`.
+- It warns about empty required fields, like Export does.
+- `export.js`:
+  - `cropNames()` was taken out of `exportZip`. It gives each crop its file
+    name, including the `_2`, `_3`… suffixes for duplicates.
+  - The new `metadataCsv()` and `exportZip` both use it, so the CSV's `Name`
+    column always matches the files of a ZIP exported from the same batch
+    (CoralNet joins on it).
+  - A `download()` helper is now shared by both.
+
+**Tested** (headless Chromium): the button is hidden on the Photos tab and
+shown on the Metadata tab. On the same batch, the CSV it downloads is
+byte-identical to `metadata_coralnet.csv` inside the exported ZIP.
 

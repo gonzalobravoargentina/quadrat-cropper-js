@@ -88,6 +88,51 @@
       });
   }
 
+  /**
+   * File name of each exported crop, keyed by item id ('' = not in the ZIP).
+   * Shared by exportZip and metadataCsv so the metadata CSV downloaded on its
+   * own names exactly the files of a ZIP exported from the same batch
+   * (CoralNet matches the CSV's Name column to the uploaded file names).
+   */
+  function cropNames(items, manifestItems, meta) {
+    var inZip = {}, seen = {}, out = {};
+    items.forEach(function (it) { inZip[it.id] = true; });
+    manifestItems.forEach(function (it) {
+      var dupBase = meta ? meta.nameFor(it).replace(/\.jpg$/, '')
+        : (it.exportName || it.name.replace(/\.[^.]+$/, '')) + '_crop';
+      var base = dupBase; var n = 2;
+      while (seen[base.toLowerCase() + '.jpg']) { base = dupBase + '_' + n++; }
+      seen[base.toLowerCase() + '.jpg'] = true;
+      out[it.id] = inZip[it.id] && (it.cropBlob || it.warpData) ? base + '.jpg' : '';
+    });
+    return out;
+  }
+
+  function download(blob, fileName) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+
+  /**
+   * Only the preset's metadata CSV (same content as in the ZIP), for fixing
+   * metadata without re-exporting every crop. Returns the number of rows.
+   */
+  function metadataCsv(items, manifestItems, meta) {
+    var names = cropNames(items, manifestItems || items, meta);
+    var lines = [root.QDMeta.csvRow(meta.columns)];
+    (manifestItems || items).forEach(function (it) {
+      if (names[it.id]) lines.push(root.QDMeta.csvRow(meta.rowFor(it, names[it.id])));
+    });
+    var stem = meta.csvName.replace(/\.csv$/i, '');
+    download(new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' }),
+      stem + '-' + nowStamp() + '.csv');
+    return lines.length - 1;
+  }
+
   function exportZip(items, manifestItems, meta, opts) {
     // opts.side: one output size (px) for every crop, or null to keep each
     // crop's own size (see cropSizeTarget in app.js)
@@ -101,18 +146,13 @@
     var inZip = {};
     items.forEach(function (it) { inZip[it.id] = true; });
 
-    var entries = [], rows = [], seen = {};
+    var entries = [], rows = [];
+    var names = cropNames(items, manifestItems, meta);
     var metaCols = collectMetaColumns(manifestItems);
     manifestItems.forEach(function (it) {
-      var dupBase = meta ? meta.nameFor(it).replace(/\.jpg$/, '')
-        : (it.exportName || it.name.replace(/\.[^.]+$/, '')) + '_crop';
-      var base = dupBase; var n = 2;
-      while (seen[base.toLowerCase() + '.jpg']) { base = dupBase + '_' + n++; }
-      seen[base.toLowerCase() + '.jpg'] = true;
-      var fileName = '';
+      var fileName = names[it.id];
       var pos = root.QDGeo ? root.QDGeo.position(it) : null;
-      if (inZip[it.id]) {
-        fileName = base + '.jpg';
+      if (fileName) {
         if (it.cropBlob) entries.push({ name: fileName, blob: it.cropBlob, exif: meta ? meta.exifFor(it) : null,
                                         resize: outSide && it.cropSide && it.cropSide !== outSide ? outSide : null });
         else if (it.warpData) entries.push({ name: fileName, data: it.warpData });
@@ -181,12 +221,7 @@
       });
     }, Promise.resolve()).then(function () {
       var blob = buildZip(ready);
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = 'quadrat-crops-' + nowStamp() + '.zip';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      download(blob, 'quadrat-crops-' + nowStamp() + '.zip');
       return blob.size;
     });
   }
@@ -205,5 +240,5 @@
     return set.slice(0, 40);
   }
 
-  root.QDExport = { exportZip: exportZip, buildZip: buildZip };
+  root.QDExport = { exportZip: exportZip, metadataCsv: metadataCsv, buildZip: buildZip };
 })(typeof self !== 'undefined' ? self : this);

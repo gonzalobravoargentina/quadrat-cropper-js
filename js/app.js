@@ -108,6 +108,7 @@
     // Photos | Metadata tabs
     QDMetaTab.init({ getItems: function () { return state.items; }, onChange: function () {} });
     QDMapTab.init({ getItems: function () { return state.items; }, onChange: function () {} });
+    el('btnMetaCsv').addEventListener('click', doExportMetaCsv);
     Array.prototype.forEach.call(document.querySelectorAll('.tabs [data-tab]'), function (b) {
       b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); });
     });
@@ -894,6 +895,21 @@
           + ' not included (excluded, or confidence < 80% and not manually adjusted) — they are listed in manifest.csv.' : ''));
       console.log('zip ready:', size);
     }).catch(function (e) { setProgress(false); alert(String(e.message || e)); });
+  }
+
+  /** Metadata tab: download only the metadata CSV (no crops, no ZIP). */
+  function doExportMetaCsv() {
+    var meta = QDMetaTab.exportInfo();
+    if (!meta) { alert('Choose a project preset first (the preset defines the CSV columns).'); return; }
+    var sel = state.items.filter(isExportable);
+    if (!sel.length) {
+      alert('No photos ready to export yet: the CSV lists the crops the ZIP would contain.');
+      return;
+    }
+    var miss = meta.missing(sel);
+    if (miss.length && !confirm('Metadata is incomplete for ' + miss.length + ' group(s):\n\n'
+        + miss.slice(0, 10).join('\n') + (miss.length > 10 ? '\n…' : '') + '\n\nDownload anyway?')) return;
+    QDExport.metadataCsv(sel, state.items, meta);
   }
 
   function clearAll() {
