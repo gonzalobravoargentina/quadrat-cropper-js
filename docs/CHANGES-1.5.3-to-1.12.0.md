@@ -48,6 +48,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.12.0 | Same output size for every crop in the ZIP | §8 |
 | 1.13.0 | Map tab: photo positions, place by click, GPS-track merge by time | §15 |
 | 1.14.0 | Metadata tab: download only the metadata CSV | §16 |
+| 1.14.1 | Map tab: zoom to ~2 cm/pixel on every basemap | §17 |
 
 ---
 
@@ -537,4 +538,25 @@ get the corrected CSV.
 **Tested** (headless Chromium): the button is hidden on the Photos tab and
 shown on the Metadata tab. On the same batch, the CSV it downloads is
 byte-identical to `metadata_coralnet.csv` inside the exported ZIP.
+
+---
+
+## 17. Deeper zoom in the Map tab (v1.14.1, part 10 of the stack)
+
+**Why:** quadrats are often ~1 m apart. The maps stopped at zoom 19, where
+those points overlap.
+
+**What:** every basemap now allows zoom 22 (~2 cm per screen pixel at
+43° S). Past each layer's native resolution the tiles are stretched:
+Sentinel-2 beyond z14, Esri and OSM beyond z19. The image gets blurry, but
+the markers stay sharp and separate, and the scale bar stays exact.
+*Zoom to photos* now stops at z19 instead of z17.
+
+**Imagery note:** no free, keyless satellite layer reaches ~1 m
+worldwide. Esri World Imagery (0.3–0.5 m on many coasts) is the best
+option, and its terms require an API key. A free ArcGIS Location Platform
+key in ⚙ enables it.
+
+**Tested:** with 86 geotagged photos spread over ~35 × 73 m, the map zooms
+to the limit (scale bar 2 m) and the markers stay distinct.
 

@@ -23,6 +23,9 @@
 
   var LEAFLET = 'vendor/leaflet-1.9.4/';
   var COLORS = { exif: '#2e9e5b', track: '#1f8fd6', map: '#e8891a', preview: '#ffffff' };
+  // Zoom 22 ≈ 4 cm per screen pixel at 43° S: past each layer's native zoom
+  // the tiles are stretched (blurry), but quadrats 1 m apart stay separate.
+  var MAX_ZOOM = 22;
   var LABELS = { exif: 'camera GPS (EXIF)', track: 'GPS track', map: 'placed on the map' };
 
   var getItems = function () { return []; }, onChange = function () {};
@@ -83,7 +86,7 @@
     // layer name is not served (tile errors before any tile loads).
     var s2url = function (y) { return 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-' + y + '_3857/default/g/{z}/{y}/{x}.jpg'; };
     var s2 = L.tileLayer(s2url(2024), {
-      maxNativeZoom: 14, maxZoom: 19,
+      maxNativeZoom: 14, maxZoom: MAX_ZOOM,
       attribution: '<a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> by '
         + '<a href="https://eox.at" target="_blank" rel="noopener">EOX IT Services GmbH</a> '
         + '(Contains modified Copernicus Sentinel data 2024) — CC BY-NC-SA 4.0'
@@ -98,13 +101,13 @@
     if (key) {
       out['Satellite — Esri World Imagery (high resolution)'] = L.tileLayer(
         'https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=' + encodeURIComponent(key), {
-          maxNativeZoom: 19, maxZoom: 20,
+          maxNativeZoom: 19, maxZoom: MAX_ZOOM,
           attribution: 'Powered by <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> | '
             + 'Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
         });
     }
     out['Map — OpenStreetMap'] = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+      maxNativeZoom: 19, maxZoom: MAX_ZOOM,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
     });
     return out;
@@ -114,7 +117,7 @@
     if (map) return Promise.resolve(map);
     return loadLeaflet().then(function (lib) {
       L = lib;
-      map = L.map('mapView', { preferCanvas: true, worldCopyJump: true }).setView([-42, -64], 4);
+      map = L.map('mapView', { preferCanvas: true, worldCopyJump: true, maxZoom: MAX_ZOOM }).setView([-42, -64], 4);
       layers = makeBaseLayers();
       var names = Object.keys(layers);
       var pick = names.filter(function (n) { return n.indexOf(cfg.base === 'esri' ? 'Esri' : cfg.base === 'osm' ? 'OpenStreetMap' : 'Sentinel') >= 0; })[0] || names[0];
@@ -184,7 +187,7 @@
     active().forEach(function (it) { var p = QDGeo.position(it); if (p) pts.push([p.latitude, p.longitude]); });
     if (st.track) st.track.points.forEach(function (p, i) { if (i % 20 === 0) pts.push([p.lat, p.lon]); });
     if (!pts.length) return false;
-    map.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 17 });
+    map.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 19 });
     return true;
   }
 
