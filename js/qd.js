@@ -39,7 +39,7 @@
   // Detector version — bumped when qd.js or its calling contract changes.
   // app.js surfaces this in the page title / header so users can confirm
   // they are running a fresh build (not a cached one).
-  var VERSION = '1.16.1';
+  var VERSION = '1.16.2';
 
   var DEFAULTS = {
     workWidth: 1152,
@@ -56,6 +56,7 @@
     minRunSw: 0.012,
     rayGap: 9,
     rayTol: 2.6,
+    yellowBrightMinConf: 0.7, // see detectQuadrat: weaker bright-yellow passes are ignored
     minSupport: 4,
     refineIters: 2,
     // ray radius cap: the middle sits inside the opening and the size prior
@@ -101,6 +102,17 @@
       // the structural scoring (RANSAC + opening probes) prunes instead.
       hueMin: 42, hueMax: 82, satMin: 0.20, valMin: 0.35,
       highlightHueMin: 25, highlightHueMax: 95,
+    },
+    // Bright yellow PVC rig (Punta Loma 2026, TG-6): tube at hue ~56-62,
+    // value ~0.9+ in sun, while the green ulva carpet around it sits at hue
+    // 70-85 but value ~0.3-0.6 — inside the wide yellow band, where it floods
+    // the opening and seeds bogus lines. Hue alone can't split them (see
+    // `yellow`); brightness can. Fallback pass, like cyan: run only when no
+    // earlier pass is confident, and it must out-score the wide-band result.
+    yellowBright: {
+      color: 'yellowBright',
+      hueMin: 44, hueMax: 70, satMin: 0.15, valMin: 0.62,
+      highlightHueMin: 30, highlightHueMax: 85,
     },
     // Same mint PVC as seen by the Olympus/OM TG-6/TG-7 (the P2P protocol
     // camera): its rendering puts the tube at hue ~165-185 in air and ~180-
@@ -699,8 +711,9 @@
     var scaled = scale < 1 ? boxScale(image, Math.round(srcW * scale), Math.round(srcH * scale))
                            : { width: image.width, height: image.height, data: image.data };
 
-    var names = ['mint', 'yellow', 'cyan', 'white'];
-    if (options && FRAME_COLORS[options.color]) names = [options.color];
+    var names = ['mint', 'yellow', 'yellowBright', 'cyan', 'white'];
+    if (options && options.color === 'yellow') names = ['yellow', 'yellowBright'];
+    else if (options && FRAME_COLORS[options.color]) names = [options.color];
     else if (options && (options.hueMin !== undefined || options.satMin !== undefined || options.valMin !== undefined)) {
       names = ['custom']; // caller pinned an explicit band — single pass
     }
@@ -719,6 +732,10 @@
       var nm = names[pi];
       // fallback pass: skip it when an earlier color is already confident
       if ((nm === 'cyan' || nm === 'white') && bestConf >= 0.8) continue;
+      // bright-yellow second opinion: whenever the wide yellow band is the
+      // one in the lead (an ulva-flooded mask can still score ~0.8-0.9 with
+      // a skewed side), or nothing is confident yet
+      if (nm === 'yellowBright' && bestConf >= 0.8 && bestName !== 'yellow') continue;
       var passOpts = (nm === 'custom')
         ? Object.assign({}, opts, { color: 'custom' })
         : Object.assign({}, opts, FRAME_COLORS[nm]);
@@ -729,6 +746,11 @@
         if (resS.confidence > res.confidence) res = resS;
       }
       res.diagnostics.color = passOpts.color;
+      // the bright-yellow band also lights up pale shell hash and sand on
+      // frameless (pre-cropped) subtidal shots, where it can assemble a weak
+      // texture quad (measured conf 0.45-0.55); real rigs score ≥ 0.8. Only
+      // a confident bright pass may compete — otherwise drop it unseen.
+      if (nm === 'yellowBright' && res.confidence < (opts.yellowBrightMinConf || 0.7)) continue;
       passResults.push(res);
       if (res.confidence > bestConf + 1e-9) { best = res; bestName = passOpts.color; bestConf = res.confidence; }
     }

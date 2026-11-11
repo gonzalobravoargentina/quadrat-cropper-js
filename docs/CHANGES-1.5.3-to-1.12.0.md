@@ -55,6 +55,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.15.1 | "All photos loaded and processed" notice | §20 |
 | 1.16.0 | Subtidal metadata preset; photo metadata + metadata-CSV coordinates in the Map tab | §21 |
 | 1.16.1 | Reef area overhang / cavefloor; one metadata row per photo loaded without a folder | §22 |
+| 1.16.2 | Detector: bright-yellow colour pass (yellow rig on green ulva / pale sand) | §23 |
 
 ---
 
@@ -757,4 +758,47 @@ covers 4 of them):
 - Values set per photo (site A/B, overhang/cavefloor) come out per photo in
   the downloaded CSV.
 - The Map filter shows "(no folder) (3)".
+
+---
+
+## 23. Bright-yellow colour pass (v1.16.2, part 16 of the stack)
+
+**Why:**
+- Punta Loma 2026 (Olympus TG-6, new bright-yellow PVC rig with side arms):
+  all 441 photos share the same EXIF (4000×3000, 4.5 mm, no digital zoom)
+  and camera height, yet many failed with *"no plausible quadrilateral among
+  fitted edges"* or gave squares of the wrong size or shape.
+- Cause: the `yellow` band is deliberately wide (hue 42–82, value ≥ 0.35)
+  because the MONTEMAR tubes reach hue ~80 in shade. Green *Ulva* (hue
+  70–85) and pale sand fall inside it, flood the opening and give RANSAC
+  lines that cut through the middle of the frame.
+- Measured on these photos: tube hue ~56–62 with value ~0.9+; ulva hue
+  ~72–79 with value ~0.3–0.6. Brightness separates them; hue alone does not.
+
+**What (`js/qd.js` only):**
+- New `FRAME_COLORS.yellowBright`: hue 44–70, sat ≥ 0.15, value ≥ 0.62.
+- Pass order is now mint → yellow → yellowBright → cyan → white.
+  - yellowBright runs when nothing is confident yet, **or** when the wide
+    yellow pass is the current best (an ulva-flooded mask can still score
+    0.8–0.9 with one skewed side). It must out-score the yellow result.
+  - Its result counts only if confidence ≥ `yellowBrightMinConf` (0.7).
+    On frameless subtidal shots the bright band also catches pale shell hash
+    and can assemble a weak texture quad (conf 0.45–0.55). Those are dropped
+    so such photos keep failing cleanly.
+  - `options.color: 'yellow'` runs both yellow passes.
+- No change to the geometry, the worker protocol or the UI.
+
+**Tested** (node, `js/qd.js` directly):
+- Punta Loma, 146 photos (every 3rd of the 441, all sites/levels, 2400 px):
+  136 → 144 detected. Opening side p5/p50/p95 = 1840/1858/1891 px (at
+  4000 px); before, some LOBERIA MEDIO photos read 1950–2190 px because a
+  side sat on the ulva. Still failing: one pale-sand ALTO photo and one
+  SITE photo (frame held up against the sky).
+- 11 full-resolution Punta Loma photos (the user's failing set): 5 failures
+  and 2 wrong sizes → all 11 detected, 1851–1878 px.
+- `tests/run.js`: 16/16 pass. MONTEMAR yellow fixtures (AP1616xx) keep the
+  same quads, with higher confidence.
+- 86 frameless subtidal photos (FOTOCUADRANTES): no new detections.
+- Tried and **rejected**: dropping ray hits near the origin. It fixed the
+  same photos but let 22 frameless photos produce false crops.
 
