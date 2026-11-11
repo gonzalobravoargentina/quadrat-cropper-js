@@ -49,6 +49,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.13.0 | Map tab: photo positions, place by click, GPS-track merge by time | §15 |
 | 1.14.0 | Metadata tab: download only the metadata CSV | §16 |
 | 1.14.1 | Map tab: zoom to ~2 cm/pixel on every basemap | §17 |
+| 1.14.2 | Map tab: Esri imagery depth detected per place (no grey tiles) | §17 |
 
 ---
 
@@ -556,6 +557,16 @@ the markers stay sharp and separate, and the scale bar stays exact.
 worldwide. Esri World Imagery (0.3–0.5 m on many coasts) is the best
 option, and its terms require an API key. A free ArcGIS Location Platform
 key in ⚙ enables it.
+
+**Esri depth (v1.14.2):** Esri imagery is deeper in some places than in
+others: z19 on many coasts, but only z17 (~0.9 m/px) at Puerto Madryn
+(checked with Esri's tilemap service). Requesting a missing level returns
+grey "no data" tiles. When the Esri layer is shown at z ≥ 16,
+`adjustEsriNative()` asks the layer's `tilemap` endpoint (19 → 15) which
+level exists at the map centre. It caches the answer per ~5 km cell and
+sets `maxNativeZoom`, so deeper zooms stretch the deepest real imagery. On
+any error it keeps z19. Tested with mocked Esri services (imagery only to
+z17): it probed 19, 18, 17 and then requested z17 tiles at zoom 22.
 
 **Tested:** with 86 geotagged photos spread over ~35 × 73 m, the map zooms
 to the limit (scale bar 2 m) and the markers stay distinct.

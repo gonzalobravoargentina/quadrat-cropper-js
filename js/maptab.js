@@ -99,12 +99,15 @@
     out['Satellite — Sentinel-2 cloudless (10 m, EOX)'] = s2;
     var key = arcgisKey();
     if (key) {
-      out['Satellite — Esri World Imagery (high resolution)'] = L.tileLayer(
-        'https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=' + encodeURIComponent(key), {
-          maxNativeZoom: 19, maxZoom: MAX_ZOOM,
-          attribution: 'Powered by <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> | '
-            + 'Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
-        });
+      var esriBase = 'https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/';
+      var esri = L.tileLayer(esriBase + 'tile/{z}/{y}/{x}?token=' + encodeURIComponent(key), {
+        maxNativeZoom: 19, maxZoom: MAX_ZOOM,
+        attribution: 'Powered by <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> | '
+          + 'Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+      });
+      esri._qdTilemap = esriBase + 'tilemap/';
+      esri._qdToken = key;
+      out['Satellite — Esri World Imagery (high resolution)'] = esri;
     }
     out['Map — OpenStreetMap'] = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxNativeZoom: 19, maxZoom: MAX_ZOOM,
@@ -124,6 +127,7 @@
       layers[pick].addTo(map);
       layerControl = L.control.layers(layers, null, { collapsed: true }).addTo(map);
       L.control.scale({ imperial: false }).addTo(map);
+      map.on('moveend baselayerchange', adjustEsriNative);
       map.on('baselayerchange', function (e) {
         cfg.base = /Esri/.test(e.name) ? 'esri' : /OpenStreetMap/.test(e.name) ? 'osm' : 's2';
         saveCfg();
@@ -134,6 +138,44 @@
       map.on('click', onMapClick);
       return map;
     });
+  }
+
+  /**
+   * Esri World Imagery is deeper in some places than others (z19 on many
+   * coasts, z17 on parts of Patagonia). Requesting a level it doesn't have
+   * returns grey "no data" tiles. Ask Esri's tilemap service how deep the
+   * imagery goes around the map centre and stretch the deepest real level
+   * instead (maxNativeZoom). Cached per ~5 km cell; on any error keep z19.
+   */
+  var nativeCache = {};
+  function tileXY(lat, lon, z) {
+    var n = Math.pow(2, z), r = lat * Math.PI / 180;
+    return { x: Math.floor((lon + 180) / 360 * n),
+             y: Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n) };
+  }
+  function esriHasTile(layer, z, lat, lon) {
+    var t = tileXY(lat, lon, z);
+    var url = layer._qdTilemap + z + '/' + t.y + '/' + t.x + '/1/1?f=json&token=' + encodeURIComponent(layer._qdToken);
+    return fetch(url).then(function (r) { return r.json(); })
+      .then(function (j) { return !!(j && j.data && j.data[0]); });
+  }
+  function adjustEsriNative() {
+    if (!map) return;
+    var layer = null;
+    Object.keys(layers).forEach(function (k) { if (layers[k]._qdTilemap && map.hasLayer(layers[k])) layer = layers[k]; });
+    if (!layer || map.getZoom() < 16) return;
+    var c = map.getCenter(), cell = tileXY(c.lat, c.lng, 13), key = cell.x + '/' + cell.y;
+    var apply = function (z) {
+      if (layer.options.maxNativeZoom !== z) { layer.options.maxNativeZoom = z; layer.redraw(); }
+    };
+    if (nativeCache[key]) { apply(nativeCache[key]); return; }
+    var z = 19;
+    (function probe() {
+      esriHasTile(layer, z, c.lat, c.lng).then(function (ok) {
+        if (ok || z <= 15) { nativeCache[key] = z; apply(z); return; }
+        z--; probe();
+      }).catch(function () { /* keep the current setting */ });
+    })();
   }
 
   /** Rebuild the basemap list (after the ArcGIS key changes in ⚙). */
