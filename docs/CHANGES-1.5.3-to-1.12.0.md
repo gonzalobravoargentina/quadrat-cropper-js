@@ -52,6 +52,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.14.2 | Map tab: Esri imagery depth detected per place (no grey tiles) | §17 |
 | 1.14.3 | `js/site-config.js`: optional site-wide ArcGIS key for hosted copies | §18 |
 | 1.15.0 | Fixed-size suggested square; settings re-crop processed photos; ZIP default = native size | §19 |
+| 1.15.1 | "All photos loaded and processed" notice | §20 |
 
 ---
 
@@ -649,4 +650,31 @@ one manual crop):
 - Fixed 2600 was kept inside each photo and every crop flagged.
 - Switching back to *detected* restored the original crops exactly.
 - Export works.
+
+---
+
+## 20. "All photos loaded" notice (v1.15.1, part 13 of the stack)
+
+**Why:** the floating progress card disappears silently when a batch ends.
+With a large Drive folder the user cannot tell whether everything has
+arrived and been processed.
+
+**What:** `announceDone()` in `app.js` shows a small green notice in the
+progress corner, e.g. *✓ All 86 photos loaded and processed — 70
+auto-accepted · 10 to review · 6 no frame found*.
+- **When it appears:** at the end of a queue run and when a Drive folder
+  finishes downloading. It only shows once nothing is queued or processing
+  and no Drive download is still running: `state.ingesting` counts the Drive
+  folders being downloaded, because the queue can drain while Drive is still
+  streaming.
+- **When it hides:** it stays until closed (✕), or until more photos are
+  added or the list is cleared.
+- **Background tab:** the tab title becomes *✓ Done — …* until the user
+  comes back.
+
+**Tested** (headless Chromium):
+- A mocked Drive folder of 12 photos with slow downloads: the notice appeared
+  only once all 12 were processed.
+- Closing it worked.
+- Adding a local folder afterwards showed it again with the new totals (27).
 

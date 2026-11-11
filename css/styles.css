@@ -270,3 +270,19 @@ main { padding: 16px; }
 }
 .map-side [hidden] { display: none !important; }   /* beats label.block */
 .dialog [hidden] { display: none !important; }
+
+/* "all photos loaded and processed" notice (same corner as the progress card) */
+.done-note {
+  position: fixed; right: 14px; bottom: 14px; z-index: 21;
+  width: min(360px, calc(100vw - 28px));
+  padding: 10px 34px 11px 12px; border-radius: 8px;
+  background: #0f2a1c; border: 1px solid var(--green, #2e9e5b);
+  box-shadow: 0 4px 16px #0006; font-size: 13px; line-height: 1.45;
+  animation: done-in .25s ease-out;
+}
+.done-note[hidden] { display: none; }
+.done-note b { display: block; color: #8ff0b6; margin-bottom: 2px; }
+.done-note span { color: var(--text, #dde); }
+.done-close { position: absolute; top: 6px; right: 6px; background: none; border: 0;
+  color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 5px; }
+@keyframes done-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }

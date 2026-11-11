@@ -29,6 +29,12 @@
             title="Includes auto crops at ≥ 80% confidence and every manually adjusted one">⬇ Export ZIP</button>
     <button id="btnClear" type="button">Clear</button>
   </div>
+  <!-- "all photos loaded" notice (app.js announceDone) -->
+  <div class="done-note" id="doneNote" role="status" aria-live="polite" hidden>
+    <button type="button" class="done-close" id="doneClose" title="Close" aria-label="Close">✕</button>
+    <b id="doneTitle"></b>
+    <span id="doneBody"></span>
+  </div>
   <div class="progress" id="progressWrap" hidden>
     <div class="progress-fill" id="progressFill"></div>
     <span class="progress-text" id="progressText"></span>
