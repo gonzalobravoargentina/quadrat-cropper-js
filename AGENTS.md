@@ -68,3 +68,7 @@ every `crop` fixture; keep it that way when touching the pipeline.
   and `manifest.csv` all do; never read `it.exif.latitude` directly for output.
 - **Leaflet is vendored** (`vendor/leaflet-1.9.4/`) and loaded lazily by
   `maptab.js`; the page itself must keep working without it.
+- **Suggested-square geometry lives in `QD.suggestSquare` (qd.js)**, shared by
+  `app.js` (`squareGeometry`) and `worker.js` (`cropFrom`). Change it there only.
+  `det.quadRaw` (original px) is kept so settings changes can re-crop without
+  re-detecting (`reapplySquare`, worker re-crop mode `msg.quadRaw`).

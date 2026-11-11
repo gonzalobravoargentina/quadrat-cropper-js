@@ -95,6 +95,12 @@ the detected outline was clearly not square (> 6 % → amber, > 12 % → red),
 when the square had to be moved/shrunk to stay inside the photo, or when its
 size differs from the typical size in the batch (outside 0.8–1.25×).
 
+Instead of a %, ⚙ **Suggested square → Fixed size** gives every photo the
+same square side in original-photo px (e.g. 1500 px), centred and rotated on
+the detected frame; ⚙ shows the detected openings of the batch and suggests a
+size. Changing either setting re-crops the photos already processed (not the
+ones adjusted by hand). In the ZIP each crop keeps its own size by default.
+
 Each thumbnail shows:
 
 - green ring — auto-accepted (confidence ≥ 0.80)

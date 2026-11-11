@@ -269,3 +269,4 @@ main { padding: 16px; }
   .map-view { height: 60vh; }
 }
 .map-side [hidden] { display: none !important; }   /* beats label.block */
+.dialog [hidden] { display: none !important; }

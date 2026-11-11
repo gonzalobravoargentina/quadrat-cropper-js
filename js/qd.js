@@ -39,7 +39,7 @@
   // Detector version — bumped when qd.js or its calling contract changes.
   // app.js surfaces this in the page title / header so users can confirm
   // they are running a fresh build (not a cached one).
-  var VERSION = '1.14.3';
+  var VERSION = '1.15.0';
 
   var DEFAULTS = {
     workWidth: 1152,
@@ -1500,6 +1500,30 @@
     return out;
   }
 
+  /**
+   * The suggested crop: best-fit square of the detected quad, then either
+   * shrunk by `inset` % (default mode) or rescaled to a FIXED side in
+   * original-photo px (opts.side), and finally kept inside the photo.
+   * Shared by app.js and worker.js so both paths give the same crop.
+   * detSide = side of the detected square (before inset / fixed size), used
+   * for the batch "unusual size" check.
+   */
+  function suggestSquare(quadRaw, W, H, opts) {
+    opts = opts || {};
+    var sq = fitSquare(quadRaw);
+    var fixed = opts.side && sq.side > 0 ? +opts.side : 0;
+    var inset = fixed ? 0 : (+opts.inset || 0);
+    var q = fixed ? scaleQuad(sq.quad, fixed / sq.side)
+      : (inset ? scaleQuad(sq.quad, 1 - inset / 100) : sq.quad);
+    var ins = fitInside(q, W, H);
+    var fq = ins.quad;
+    return {
+      quad: fq, side: Math.hypot(fq[1].x - fq[0].x, fq[1].y - fq[0].y),
+      detSide: sq.side, residual: sq.residual, moved: ins.moved, shrunk: ins.shrunk,
+      inset: inset, fixedSide: fixed || null
+    };
+  }
+
   return {
     VERSION: VERSION,
     DEFAULTS: DEFAULTS,
@@ -1512,6 +1536,7 @@
     ransacLines: ransacLines,
     solveH: solveH,
     fitSquare: fitSquare,
+    suggestSquare: suggestSquare,
     fitInside: fitInside,
     scaleQuad: scaleQuad,
     applyH: applyH,

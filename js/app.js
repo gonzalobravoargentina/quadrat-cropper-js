@@ -56,6 +56,7 @@
     });
     ui.settings.addEventListener('click', openSettings);
     ui.saveSettings.addEventListener('click', saveSettings);
+    el('squareMode').addEventListener('change', syncSquareMode);
     ui.exportBtn.addEventListener('click', doExport);
     ui.clear.addEventListener('click', clearAll);
 
@@ -387,7 +388,8 @@
   async function processInWorker(it, slot) {
     if (!it.meta) it.meta = QDMeta.joinMeta(it.name, state.csvs);
     if (!it.exif) it.exif = await QDExif.fromBlob(it.blob);
-    var r = await runInWorker(slot, { id: it.id, blob: it.blob, maxSide: NATIVE_MAX, maxMP: MAX_DETECT_MP, inset: getInset() });
+    var r = await runInWorker(slot, { id: it.id, blob: it.blob, maxSide: NATIVE_MAX, maxMP: MAX_DETECT_MP,
+      inset: getInset(), squareSide: getSquareSide() });
     if (r.error) throw new Error(r.error);
     var det = r.det;
     it.det = det;
@@ -397,7 +399,9 @@
     it.reason = det.diagnostics && det.diagnostics.reason || null;
     if (r.ok) {
       det.geom = r.geom;
-      it.sidePx = r.geom.side;
+      det.quadFull = r.geom.quad;
+      it.sidePx = r.geom.detSide;          // detected size: for the batch size check
+      it.natW = r.natW; it.natH = r.natH;
       it.imgShort = Math.min(r.natW, r.natH);
       applyChecks(it);
       it.corners = det.quadFull.map(function (c) { return { x: c.x, y: c.y }; });
@@ -527,6 +531,7 @@
     setProgress(false);
     state.busy = false;
     ui.exportBtn.disabled = false;
+    if (reapplyPending) { reapplyPending = false; reapplySquare(); }
   }
 
   // Detection input: keep the ORIGINAL-resolution pixels. detectQuadrat()
@@ -576,7 +581,8 @@
       det.quadRaw = quadRaw;
       det.quadFull = g.quad;
       det.geom = g;
-      it.sidePx = g.side;
+      it.sidePx = g.detSide;
+      it.natW = dec.natW; it.natH = dec.natH;
       it.imgShort = Math.min(dec.natW, dec.natH);
       applyChecks(it);
       it.source = 'auto';
@@ -616,14 +622,22 @@
     return isFinite(v) ? Math.max(0, Math.min(20, v)) : 5;
   }
 
+  /**
+   * Suggested-square size mode (⚙ "Suggested square"): null = the detected
+   * frame shrunk by the inset %; a number = a FIXED side in original-photo
+   * px (the camera sits at a fixed height, so the opening has almost the
+   * same px size in every photo; a fixed side keeps tube out of the crop when
+   * a detection comes out slightly large). localStorage 'quadrat.squareSide'.
+   */
+  function getSquareSide() {
+    var v = '';
+    try { v = localStorage.getItem('quadrat.squareSide') || ''; } catch (e) { /* private mode */ }
+    return /^\d+$/.test(v) ? Math.max(100, Math.min(NATIVE_MAX, +v)) : null;
+  }
+
   function squareGeometry(quadRaw, W, H) {
-    var sq = QD.fitSquare(quadRaw);
-    var inset = getInset();
-    var sqq = inset ? QD.scaleQuad(sq.quad, 1 - inset / 100) : sq.quad;
-    var ins = QD.fitInside(sqq, W, H);
-    var q = ins.quad;
-    var side = Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y);
-    return { quad: q, side: side, residual: sq.residual, moved: ins.moved, shrunk: ins.shrunk, inset: inset };
+    // same helper as worker.js (QD.suggestSquare): both paths give one crop
+    return QD.suggestSquare(quadRaw, W, H, { inset: getInset(), side: getSquareSide() });
   }
 
   /**
@@ -658,6 +672,11 @@
       flags.unshift('frame runs off the photo — square kept inside the image; check corners');
       cap = Math.min(cap, CAP_REVIEW);
     }
+    if (g.fixedSide && g.detSide && g.fixedSide > g.detSide * 1.02) {
+      flags.unshift('fixed square (' + g.fixedSide + ' px) larger than the detected opening (~'
+        + Math.round(g.detSide) + ' px): the crop may include the frame');
+      cap = Math.min(cap, CAP_REVIEW);
+    }
     var frac = fracOverride !== undefined ? fracOverride : typicalSideFrac(it);
     if (frac) {
       var exp = frac * it.imgShort, ratio = it.sidePx / exp;
@@ -684,8 +703,10 @@
    * fixed side in px; 'native': each crop keeps its own size.
    */
   function getCropSize() {
-    var v = 'median';
-    try { v = localStorage.getItem('quadrat.cropSize') || 'median'; } catch (e) { /* private mode */ }
+    // default 'native' (v1.15): each crop keeps the size seen in the viewer.
+    // With a fixed suggested square, crops from one camera are equal anyway.
+    var v = 'native';
+    try { v = localStorage.getItem('quadrat.cropSize') || 'native'; } catch (e) { /* private mode */ }
     return v;
   }
   function cropSizeTarget(sel) {
@@ -933,6 +954,11 @@
   function openSettings() {
     ui.clientIdInput.value = QDDrive.getClientId();
     el('insetInput').value = getInset();
+    var ss = getSquareSide();
+    el('squareMode').value = ss ? 'fixed' : 'detected';
+    el('squareSidePx').value = ss || suggestedFixedSide() || 1600;
+    el('squareStats').textContent = squareStatsText();
+    syncSquareMode();
     var cs = getCropSize();
     el('cropSizeMode').value = /^\d+$/.test(cs) ? 'fixed' : cs;
     el('cropSizePx').value = /^\d+$/.test(cs) ? cs : 1600;
@@ -942,7 +968,14 @@
   }
   function saveSettings() {
     QDDrive.setConfig(ui.clientIdInput.value, QDDrive.getApiKey());
+    var before = getInset() + '|' + getSquareSide();
     try { localStorage.setItem('quadrat.inset', String(Math.max(0, Math.min(20, +el('insetInput').value || 0)))); } catch (e) { /* private mode */ }
+    try {
+      if (el('squareMode').value === 'fixed') {
+        localStorage.setItem('quadrat.squareSide', String(Math.round(+el('squareSidePx').value || 1600)));
+      } else localStorage.removeItem('quadrat.squareSide');
+    } catch (e) { /* private mode */ }
+    if (getInset() + '|' + getSquareSide() !== before) reapplySquare();
     try {
       var m = el('cropSizeMode').value;
       localStorage.setItem('quadrat.cropSize', m === 'fixed' ? String(Math.round(+el('cropSizePx').value || 1600)) : m);
@@ -953,6 +986,91 @@
       if (k !== old) QDMapTab.resetBaseLayers();
     } catch (e) { /* private mode */ }
     ui.settingsDialog.close();
+  }
+
+  function syncSquareMode() {
+    var fixed = el('squareMode').value === 'fixed';
+    el('squareInsetRow').hidden = fixed;
+    el('squareFixedRow').hidden = !fixed;
+  }
+
+  /** Detected opening sides (original px) of the clean auto detections. */
+  function detectedSides() {
+    return state.items.filter(function (o) {
+      return o.det && o.det.geom && o.det.geom.detSide && (o.det.confidence || 0) >= 0.8;
+    }).map(function (o) { return o.det.geom.detSide; }).sort(function (a, b) { return a - b; });
+  }
+  /** A fixed side that stays inside most openings: ~5 % under the median. */
+  function suggestedFixedSide() {
+    var s = detectedSides();
+    return s.length ? Math.round(s[Math.floor(s.length / 2)] * 0.95 / 10) * 10 : null;
+  }
+  function squareStatsText() {
+    var s = detectedSides();
+    if (!s.length) return 'Load photos to see the size of the detected openings.';
+    var pct = function (q) { return Math.round(s[Math.min(s.length - 1, Math.floor(q * s.length))]); };
+    return 'Detected openings in this batch (' + s.length + ' photos): median ' + pct(0.5)
+      + ' px, 10–90 % range ' + pct(0.1) + '–' + pct(0.9) + ' px. Suggested fixed size: '
+      + suggestedFixedSide() + ' px.';
+  }
+
+  /**
+   * ⚙ "Suggested square" changed: re-crop every AUTO crop already processed
+   * from its stored detection (det.quadRaw) — no detection again. Crops
+   * adjusted by hand are left alone. Drive originals released after
+   * processing are downloaded again (slower).
+   */
+  var reapplyPending = false;
+  async function reapplySquare() {
+    if (state.busy) { reapplyPending = true; return; }   // after the running batch
+    var todo = state.items.filter(function (o) {
+      return o.status === 'done' && o.source === 'auto' && o.det && o.det.quadRaw;
+    });
+    if (!todo.length) return;
+    state.busy = true;
+    var workers = getPool().filter(function (w) { return !w.broken; });
+    var done = 0, next = 0, fails = 0;
+    var msgFor = function () {
+      return 'Re-cropping with the new square ' + done + '/' + todo.length;
+    };
+    setProgress(true, msgFor(), 0);
+    async function one(it, slot) {
+      await ensureBlob(it);
+      if (slot) {
+        var r = await runInWorker(slot, { id: it.id, blob: it.blob, quadRaw: it.det.quadRaw,
+          maxSide: NATIVE_MAX, inset: getInset(), squareSide: getSquareSide() });
+        if (r.error) throw new Error(r.error);
+        it.det.geom = r.geom;
+        it.det.quadFull = r.geom.quad;
+        it.corners = r.geom.quad.map(function (c) { return { x: c.x, y: c.y }; });
+        it.cropBlob = r.cropBlob;
+        it.cropSide = r.side;
+        if (it.thumbURL && /^blob:/.test(it.thumbURL)) URL.revokeObjectURL(it.thumbURL);
+        it.thumbURL = URL.createObjectURL(r.thumbBlob);
+      } else {
+        var g = squareGeometry(it.det.quadRaw, it.natW, it.natH);
+        it.det.geom = g;
+        it.det.quadFull = g.quad;
+        await makeCrop(it, g.quad, 'auto');
+      }
+    }
+    async function lane(slot) {
+      while (next < todo.length) {
+        var it = todo[next++];
+        try { await one(it, slot); } catch (e) { fails++; console.warn('re-crop failed', it.name, e); }
+        releaseOriginal(it);
+        done++;
+        QDGrid.updateCard(it);
+        setProgress(true, msgFor(), done / todo.length);
+      }
+    }
+    await Promise.all((workers.length ? workers : [null]).map(lane));
+    var frac = typicalSideFrac(null);
+    todo.forEach(function (o) { applyChecks(o, frac); QDGrid.updateCard(o); });
+    renderStats();
+    setProgress(false);
+    state.busy = false;
+    if (fails) alert(fails + ' photo(s) could not be re-cropped (original not available); see the console.');
   }
 
   document.addEventListener('DOMContentLoaded', init);

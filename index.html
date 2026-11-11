@@ -256,16 +256,28 @@
     <p class="muted small">Stored only in this browser, sent only to Google.
        Scopes requested: <code>drive.readonly</code> (list + download the files you pick).</p>
     <h2>Crop</h2>
-    <label>Shrink the suggested square by
+    <label>Suggested square
+      <select id="squareMode">
+        <option value="detected">Detected frame, shrunk by a %</option>
+        <option value="fixed">Fixed size (px in the original photo)</option>
+      </select>
+    </label>
+    <label id="squareInsetRow">Shrink the detected square by
       <input type="number" id="insetInput" min="0" max="20" step="0.5" style="width:5em"> %
     </label>
-    <p class="muted small">Keeps the yellow/green PVC rim out of the crop. Applies to
-       photos processed after saving (default 5 %).</p>
+    <label id="squareFixedRow" hidden>Side of the square
+      <input type="number" id="squareSidePx" min="100" max="4000" step="10" style="width:6em"> px
+    </label>
+    <p class="muted small" id="squareStats"></p>
+    <p class="muted small">Both keep the yellow/green PVC rim out of the crop. A fixed size
+       (camera at a fixed height) gives every photo the same square, centred and rotated on the
+       detected frame. Saving a change re-crops the photos already processed, except those
+       adjusted by hand.</p>
     <label>Crop size in the ZIP
       <select id="cropSizeMode">
-        <option value="median">Same for all photos — median of the batch (recommended)</option>
+        <option value="native">Each crop at its own size, as in the viewer (default)</option>
+        <option value="median">Same for all photos — median of the batch</option>
         <option value="fixed">Same for all photos — fixed size</option>
-        <option value="native">Each crop at its own size</option>
       </select>
       <input type="number" id="cropSizePx" min="200" max="4000" step="10" style="width:6em"> px
     </label>

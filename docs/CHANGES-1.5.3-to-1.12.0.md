@@ -51,6 +51,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.14.1 | Map tab: zoom to ~2 cm/pixel on every basemap | §17 |
 | 1.14.2 | Map tab: Esri imagery depth detected per place (no grey tiles) | §17 |
 | 1.14.3 | `js/site-config.js`: optional site-wide ArcGIS key for hosted copies | §18 |
+| 1.15.0 | Fixed-size suggested square; settings re-crop processed photos; ZIP default = native size | §19 |
 
 ---
 
@@ -596,4 +597,56 @@ to create an ArcGIS key, and the key must not live in the shared code.
 **Tested:** without a site key, the layers and the default basemap are
 unchanged. With a site key (served by a mocked `site-config.js`), Esri is
 listed, selected and loads, and the ⚙ note shows.
+
+---
+
+## 19. Fixed-size suggested square (v1.15.0, part 12 of the stack)
+
+**Why:** the camera sits at a fixed height on the frame, so the quadrat
+opening has nearly the same px size in every photo from one camera.
+Shrinking each detected square by a percentage still lets tube into the
+crop whenever a detection comes out slightly large. The field team wants
+one fixed square size, e.g. 1500 × 1500 px in the original photo, centred
+and rotated on the detected frame. They also want each crop exported at
+the size seen in the viewer, and a settings change to apply to photos
+already loaded, which until now kept their old crop.
+
+**What:**
+- `QD.suggestSquare(quadRaw, W, H, {inset, side})` in `qd.js` is now the
+  single geometry helper used by `app.js` and `worker.js`. It computes the
+  best-fit square, then either applies the inset % or rescales to the
+  fixed `side`, then keeps the square inside the photo. It also returns
+  `detSide`, the detected square before inset or fixed size, which the
+  batch "unusual size" check now uses.
+- ⚙ **Suggested square:** *Detected frame, shrunk by a %* (default, as
+  before) or *Fixed size (px in the original photo)*, stored in
+  `localStorage 'quadrat.squareSide'`.
+  - The dialog shows the batch's detected openings (median, 10–90 %) and
+    suggests a fixed side ~5 % under the median.
+  - New flag (review) when the fixed side is larger than the detected
+    opening: *the crop may include the frame*.
+- **Saving a change re-crops the already-processed auto crops**
+  (`reapplySquare()`):
+  - It reuses the stored detection (`det.quadRaw`) through the workers in
+    the new re-crop mode (`msg.quadRaw`, which skips detection), or uses
+    `makeCrop` on the main thread as a fallback.
+  - Manual crops are not touched. Released Drive originals are
+    downloaded again.
+  - If a batch is still running, the re-crop waits for it to finish.
+- **ZIP crop size default → *Each crop at its own size*** (native). With a
+  fixed square, the crops from one camera are already the same size.
+  *Median* and *fixed* are still available.
+
+**Note:** a fixed size is in px of the original photo, so it makes sense
+per camera or resolution. A batch mixing cameras should use the detected
+mode, or be processed per camera.
+
+**Tested** (headless Chromium, 15 photos from mixed TG/G8/ORF sources, plus
+one manual crop):
+- Fixed 1500 re-cropped all 14 auto crops to 1500 × 1500 and left the
+  manual one unchanged.
+- The ⚙ stats and the suggestion appear.
+- Fixed 2600 was kept inside each photo and every crop flagged.
+- Switching back to *detected* restored the original crops exactly.
+- Export works.
 

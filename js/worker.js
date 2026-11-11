@@ -7,8 +7,13 @@
  * checks (typical size, flags/confidence caps) stay in app.js because they
  * need every photo's result.
  *
- * in:  { id, blob, maxSide, maxMP }
+ * in:  { id, blob, maxSide, maxMP, inset, squareSide }
  * out: { id, ok, det, geom, natW, natH, side, cropBlob, thumbBlob, error }
+ *
+ * Re-crop mode (settings changed after processing): pass quadRaw (the
+ * detector quad in original px from an earlier run) and detection is
+ * skipped — only square → warp → encode. out: { id, ok, geom, natW, natH,
+ * side, cropBlob, thumbBlob }
  */
 /* global importScripts, QuadratDetect, OffscreenCanvas */
 importScripts('qd.js');
@@ -53,9 +58,31 @@ function thumbFit(src, w, h, letterbox) {
   return t.convertToBlob({ type: 'image/jpeg', quality: 0.75 });
 }
 
+/** square (QD.suggestSquare) → warp from original px → JPEG + thumbnail */
+async function cropFrom(src, quadRaw, natW, natH, msg, out) {
+  var g = QD.suggestSquare(quadRaw, natW, natH, { inset: msg.inset || 0, side: msg.squareSide || 0 });
+  out.geom = g;
+  var side = sideForQuad(g.quad, msg.maxSide);
+  var warped = QD.warpToSquare({ width: src.width, height: src.height, data: src.data }, g.quad, side);
+  var oc = new OffscreenCanvas(side, side);
+  oc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(warped.buffer), side, side), 0, 0);
+  out.side = side;
+  out.cropBlob = await oc.convertToBlob({ type: 'image/jpeg', quality: 0.92 });
+  out.thumbBlob = await thumbFit(oc, side, side, false);
+  return g;
+}
+
 async function processPhoto(msg) {
   var bmp = await createImageBitmap(msg.blob, { imageOrientation: 'from-image' });
   var natW = bmp.width, natH = bmp.height;
+  if (msg.quadRaw) {                         // re-crop: no detection
+    var fc = new OffscreenCanvas(natW, natH), fx = fc.getContext('2d', { willReadFrequently: true });
+    fx.drawImage(bmp, 0, 0);
+    bmp.close();
+    var o = { id: msg.id, ok: true, natW: natW, natH: natH };
+    await cropFrom(fx.getImageData(0, 0, natW, natH), msg.quadRaw, natW, natH, msg, o);
+    return o;
+  }
   var mp = natW * natH / 1e6;
   var scale = mp > msg.maxMP ? Math.sqrt(msg.maxMP / mp) : 1;
   var w = Math.max(2, Math.round(natW * scale)), h = Math.max(2, Math.round(natH * scale));
@@ -75,15 +102,7 @@ async function processPhoto(msg) {
   // detection px → original px, then the best-fit square kept inside the photo
   var fac = natW / w;
   var quadRaw = det.quad.map(function (c) { return { x: c.x * fac, y: c.y * fac }; });
-  var sq = QD.fitSquare(quadRaw);
-  // shrink by the inset (% of side) so the PVC rim stays out of the crop
-  var inset = msg.inset || 0;
-  var ins = QD.fitInside(inset ? QD.scaleQuad(sq.quad, 1 - inset / 100) : sq.quad, natW, natH);
-  var q = ins.quad;
   out.det.quadRaw = quadRaw;
-  out.det.quadFull = q;
-  out.geom = { quad: q, side: Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y),
-               residual: sq.residual, moved: ins.moved, shrunk: ins.shrunk, inset: inset };
 
   // warp from ORIGINAL pixels (re-draw only in the rare >maxMP case)
   var src = id;
@@ -93,13 +112,9 @@ async function processPhoto(msg) {
     src = fctx.getImageData(0, 0, natW, natH);
   }
   bmp.close();
-  var side = sideForQuad(q, msg.maxSide);
-  var warped = QD.warpToSquare({ width: src.width, height: src.height, data: src.data }, q, side);
-  var oc = new OffscreenCanvas(side, side);
-  oc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(warped.buffer), side, side), 0, 0);
-  out.side = side;
-  out.cropBlob = await oc.convertToBlob({ type: 'image/jpeg', quality: 0.92 });
-  out.thumbBlob = await thumbFit(oc, side, side, false);
+  // the suggested square (detected − inset %, or a fixed side) → crop
+  var g = await cropFrom(src, quadRaw, natW, natH, msg, out);
+  out.det.quadFull = g.quad;
   return out;
 }
 
