@@ -74,6 +74,7 @@
       <span class="dot" style="background:#2e9e5b"></span> camera GPS
       <span class="dot" style="background:#1f8fd6"></span> GPS track
       <span class="dot" style="background:#e8891a"></span> placed on the map
+      <span class="dot" style="background:#a55bd6"></span> metadata CSV
       <button id="btnMapFit" type="button" class="linklike">zoom to photos</button>
     </p>
 
@@ -85,6 +86,9 @@
         <button id="btnMapSelectAll" type="button">Select all</button>
         <button id="btnMapSelectNone" type="button">None</button>
       </div>
+      <button id="btnMapFromCsv" type="button" class="primary" hidden></button>
+      <p class="small muted">Under each photo: camera time and the Metadata tab's values for its folder
+         (plus its row of a metadata CSV, if one was loaded); hover a photo for the full list.</p>
       <div id="mapNoGps" class="map-list"></div>
     </details>
 

@@ -291,11 +291,11 @@
 
   function position(it) {
     if (!it) return null;
-    if (it.geo && isFinite(it.geo.lat) && isFinite(it.geo.lon)) {
+    if (it.geo && Number.isFinite(it.geo.lat) && Number.isFinite(it.geo.lon)) {
       return { latitude: it.geo.lat, longitude: it.geo.lon, source: it.geo.source || 'map' };
     }
     var e = it.exif;
-    if (e && e.latitude != null && e.longitude != null && isFinite(e.latitude) && isFinite(e.longitude)) {
+    if (e && Number.isFinite(e.latitude) && Number.isFinite(e.longitude)) {
       return { latitude: e.latitude, longitude: e.longitude, source: 'exif' };
     }
     return null;

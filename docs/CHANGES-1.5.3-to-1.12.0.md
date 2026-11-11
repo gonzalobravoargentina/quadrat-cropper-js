@@ -53,6 +53,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.14.3 | `js/site-config.js`: optional site-wide ArcGIS key for hosted copies | §18 |
 | 1.15.0 | Fixed-size suggested square; settings re-crop processed photos; ZIP default = native size | §19 |
 | 1.15.1 | "All photos loaded and processed" notice | §20 |
+| 1.16.0 | Subtidal metadata preset; photo metadata + metadata-CSV coordinates in the Map tab | §21 |
 
 ---
 
@@ -677,4 +678,51 @@ auto-accepted · 10 to review · 6 no frame found*.
   only once all 12 were processed.
 - Closing it worked.
 - Adding a local folder afterwards showed it again with the new totals (27).
+
+---
+
+## 21. Subtidal preset and metadata in the Map tab (v1.16.0, part 14 of the stack)
+
+**Why:**
+- Subtidal photo-quadrats (rocky reefs, diver with strobes) use another
+  CoralNet layout.
+- When placing photos that have no GPS, the team needs to see what is known
+  about each one (site, reef, time…) to tell where it was taken. Field
+  metadata CSVs often already carry coordinates.
+
+**What:**
+- **Preset "Subtidal — MBON Pole to Pole (CoralNet)"** (`metatab.js`).
+  - **Columns:** exactly as the team's subtidal `metadata.csv` (Isla de los
+    Estados 2022): `Name, Date, region, site, reef name, reef area,
+    understory, Height (cm), Latitude, Longitude, Depth, Camera,
+    Photographer, Water quality, Strobes, Framing gear used, White balance
+    card, Comments`.
+  - **Fields and defaults:** `reef area` is chosen from horizontal /
+    vertical, and `understory` from no / yes. Defaults: Height 45, Water
+    quality good, Strobes two, White balance card no. Framing gear is fixed
+    at 25x25cm.
+  - **Folder parser (`subtidalGuess`):** reads from the deepest folder up.
+    A VERTICAL / HORIZONTAL folder (also PARED / PISO, WALL / FLOOR) fills
+    reef area; the folders above fill reef name, site and region. Year and
+    season folders are skipped.
+- **Map tab, photos without a position:**
+  - Each entry shows the camera time and the Metadata tab's values for its
+    folder (`QDMetaTab.summaryFor`).
+  - The tooltip shows everything, including the photo's row of a metadata
+    CSV loaded with the photos (`it.meta.csv`) and the folder.
+  - A button **Use the coordinates of the metadata CSV (N)** appears when
+    that row has latitude and longitude columns. It sets
+    `it.geo = {source: 'csv'}`, shown in purple. `gps_source` in the
+    manifest is `csv`.
+- **Fix:** `geo.js` `position()` and the CSV reader now use
+  `Number.isFinite`. `isFinite(null)` is true, so a photo with no CSV row
+  could get a `null` position.
+
+**Tested** (headless Chromium, 5 photos without GPS in
+`ISLA DE LOS ESTADOS/2022/HOPPNER/HOPPNER I/VERTICAL/` and a field CSV that
+covers 4 of them):
+- The preset guessed region / site / reef name / reef area from the folders.
+- The Map list shows the values.
+- The CSV button placed exactly the 4 photos that have coordinates.
+- The downloaded metadata CSV header is byte-identical to the team's file.
 

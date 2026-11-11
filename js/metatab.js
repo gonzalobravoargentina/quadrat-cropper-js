@@ -18,6 +18,8 @@
 
   var STRATA = ['HIGHTIDE', 'MIDTIDE', 'LOWTIDE'];
   var SEASONS = ['FRIO', 'CALIDO'];
+  var REEF_AREAS = ['horizontal', 'vertical'];
+  var YES_NO = ['no', 'yes'];
 
   // Localities already monitored: state + AMP code (Comments), from the
   // team's 2026 metadata.csv (6670 photos; one state/AMP per locality). New
@@ -95,6 +97,36 @@
         { key: 'White balance card' }
       ],
       guess: function (k) { return azoresGuess(k); }
+    },
+
+    // MBON Pole to Pole subtidal photo-quadrats (rocky reefs, diver with
+    // strobes). Columns exactly as the team's subtidal metadata.csv (Isla de
+    // los Estados 2022): Aux fields region, site, reef name, reef area,
+    // understory. Height (cm) is editable here (45 cm in that survey).
+    subtidal: {
+      label: 'Subtidal — MBON Pole to Pole (CoralNet)',
+      csvName: 'metadata_coralnet.csv',
+      columns: ['Name', 'Date', 'region', 'site', 'reef name', 'reef area', 'understory', 'Height (cm)',
+        'Latitude', 'Longitude', 'Depth', 'Camera', 'Photographer', 'Water quality', 'Strobes',
+        'Framing gear used', 'White balance card', 'Comments'],
+      auto: { Name: 'file name of the crop', Date: 'EXIF date', Latitude: 'EXIF GPS',
+              Longitude: 'EXIF GPS', Camera: 'EXIF camera model' },
+      fixed: { 'Framing gear used': '25x25cm' },
+      fields: [
+        { key: 'region', required: true, remember: true, hint: 'e.g. Isla de los Estados' },
+        { key: 'site', required: true, remember: true },
+        { key: 'reef name', required: true, hint: 'e.g. Hoppner I' },
+        { key: 'reef area', options: REEF_AREAS, required: true },
+        { key: 'understory', options: YES_NO, default: 'no' },
+        { key: 'Depth', hint: 'm, e.g. 6' },
+        { key: 'Height (cm)', default: '45' },
+        { key: 'Photographer', required: true, remember: true },
+        { key: 'Water quality', default: 'good' },
+        { key: 'Strobes', default: 'two' },
+        { key: 'White balance card', default: 'no' },
+        { key: 'Comments', remember: true, hint: 'e.g. Costa Patagonica' }
+      ],
+      guess: function (k) { return subtidalGuess(k); }
     }
   };
 
@@ -222,6 +254,47 @@
       if (sv && !out.strata && !m) out.strata = sv;
     }
     return out;
+  }
+
+  /**
+   * Subtidal folders, read from the deepest folder up: a reef-area folder
+   * (VERTICAL / HORIZONTAL, PARED / PISO, WALL / FLOOR …) → reef area; the
+   * folders above → reef name, site, region (year and season folders are
+   * skipped). E.g. ISLA DE LOS ESTADOS/2022/HOPPNER/HOPPNER I/VERTICAL.
+   */
+  function normReefArea(v) {
+    var s = normKey(v);
+    if (/^(VERTICAL|VERT|PARED|WALL)$/.test(s)) return 'vertical';
+    if (/^(HORIZONTAL|HORIZ|PISO|FLOOR|FONDO)$/.test(s)) return 'horizontal';
+    return '';
+  }
+  function subtidalGuess(groupKey) {
+    var parts = String(groupKey).split('/').map(function (x) { return x.trim(); }).filter(Boolean);
+    if (!parts.length || groupKey === 'Ungrouped' || /^Load \d+$/.test(groupKey)) return {};
+    var out = {}, named = [];
+    for (var i = parts.length - 1; i >= 0; i--) {
+      var ra = normReefArea(parts[i]);
+      if (ra) { if (!out['reef area']) out['reef area'] = ra; continue; }
+      if (/^(19|20)\d{2}$/.test(normKey(parts[i])) || normSeason(parts[i])) continue;
+      if (COUNTRIES.test(normKey(parts[i]))) break;
+      named.push(parts[i]);
+    }
+    if (named[0]) out['reef name'] = named[0];
+    if (named[1]) out.site = named[1];
+    if (named[2]) out.region = named[2];
+    return out;
+  }
+
+  /**
+   * Metadata of one photo for display elsewhere (Map tab): the preset's
+   * per-group fields that have a value, as [key, value] pairs.
+   */
+  function summaryFor(it) {
+    var p = preset(); if (!p) return [];
+    var g = valuesFor(groupOf(it));
+    return p.fields.filter(function (f) { return !f.extra; })
+      .map(function (f) { return [f.key, fieldValue(p, g, f.key)]; })
+      .filter(function (x) { return x[1]; });
   }
 
   /** Field value for a group, falling back to another field (Photographer ← Group). */
@@ -405,7 +478,8 @@
   }
 
   root.QDMetaTab = {
-    init: init, render: render, exportInfo: exportInfo, groupOf: groupOf,
+    init: init, render: render, exportInfo: exportInfo, groupOf: groupOf, summaryFor: summaryFor,
+    _subtidalGuess: subtidalGuess,
     _folderGuess: folderGuess, _azoresGuess: azoresGuess, _normStrata: normStrata, PRESETS: PRESETS
   };
 })(typeof self !== 'undefined' ? self : this);

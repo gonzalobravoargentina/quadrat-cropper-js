@@ -181,6 +181,10 @@ information in every crop's **EXIF** (date, GPS, make/model, photographer as
 Artist, the group fields in ImageDescription/UserComment). Export warns when
 a required field is empty. Choose *None* as preset to skip all of this.
 
+Presets: **Intertidal — MBON Pole to Pole**, **Subtidal — MBON Pole to Pole**
+(region, site, reef name, reef area, understory; folders such as
+`REGION/SITE/REEF NAME/VERTICAL` fill them) and **Azores workshop**.
+
 To fix metadata without re-exporting the crops, use **⬇ Download metadata.csv**
 in the Metadata tab: it downloads only the CSV, with exactly the file names
 the ZIP would have, ready to upload to CoralNet again.

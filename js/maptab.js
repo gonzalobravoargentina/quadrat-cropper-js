@@ -22,11 +22,11 @@
   'use strict';
 
   var LEAFLET = 'vendor/leaflet-1.9.4/';
-  var COLORS = { exif: '#2e9e5b', track: '#1f8fd6', map: '#e8891a', preview: '#ffffff' };
+  var COLORS = { exif: '#2e9e5b', track: '#1f8fd6', map: '#e8891a', csv: '#a55bd6', preview: '#ffffff' };
   // Zoom 22 ≈ 4 cm per screen pixel at 43° S: past each layer's native zoom
   // the tiles are stretched (blurry), but quadrats 1 m apart stay separate.
   var MAX_ZOOM = 22;
-  var LABELS = { exif: 'camera GPS (EXIF)', track: 'GPS track', map: 'placed on the map' };
+  var LABELS = { exif: 'camera GPS (EXIF)', track: 'GPS track', map: 'placed on the map', csv: 'metadata CSV' };
 
   var getItems = function () { return []; }, onChange = function () {};
   var map = null, L = null, layers = {}, layerControl = null, markerLayer = null, previewLayer = null, trackLayer = null;
@@ -327,18 +327,76 @@
 
   // ------------------------------------------------------------ side panel
 
+  /**
+   * What is known about a photo without GPS, to help place it by hand:
+   * camera time, the Metadata tab's fields for its folder (locality, site,
+   * strata… or region, reef name… per preset), the folder, and any row of a
+   * metadata CSV loaded with the photos (it.meta.csv). Full list in the
+   * tooltip; the first values inline.
+   */
+  function metaInfo(it) {
+    var rows = [['camera time', it.exif && it.exif.dateTimeOriginal || '—']];
+    if (root.QDMetaTab && root.QDMetaTab.summaryFor) {
+      root.QDMetaTab.summaryFor(it).forEach(function (kv) { rows.push(kv); });
+    }
+    var csv = it.meta && it.meta.csv || {};
+    Object.keys(csv).forEach(function (k) {
+      if (k === '_row' || /^name$/i.test(k)) return;
+      // skip a CSV value already shown with the same value from the Metadata tab
+      if (rows.some(function (r) { return r[0].toLowerCase() === k.toLowerCase()
+        && String(r[1]).toLowerCase() === String(csv[k]).toLowerCase(); })) return;
+      rows.push([k + ' (CSV)', csv[k]]);
+    });
+    rows.push(['folder', groupOf(it)]);
+    return rows;
+  }
+  function metaBlock(it) {
+    var rows = metaInfo(it);
+    var tip = rows.map(function (r) { return r[0] + ': ' + r[1]; }).join('\n');
+    var inline = rows.slice(1).filter(function (r) { return r[0] !== 'folder'; })
+      .map(function (r) { return r[1]; }).slice(0, 5).join(' · ');
+    return '<span title="' + esc(tip) + '">' + esc(it.name)
+      + '<br><span class="muted">' + esc(rows[0][1]) + '</span>'
+      + (inline ? '<br><span class="map-meta">' + esc(inline) + '</span>' : '')
+      + '</span>';
+  }
+  /** Latitude/longitude columns of the joined metadata CSV, if any. */
+  function csvLatLon(it) {
+    var csv = it.meta && it.meta.csv; if (!csv) return null;
+    var lat = null, lon = null;
+    Object.keys(csv).forEach(function (k) {
+      var kk = k.toLowerCase().replace(/[^a-z]/g, '');
+      if (/^(lat|latitude|gpslatitude|decimallatitude)$/.test(kk)) lat = parseFloat(String(csv[k]).replace(',', '.'));
+      if (/^(lon|lng|long|longitude|gpslongitude|decimallongitude)$/.test(kk)) lon = parseFloat(String(csv[k]).replace(',', '.'));
+    });
+    // Number.isFinite: a missing column must not read as 0 (isFinite(null) is true)
+    return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && !(lat === 0 && lon === 0)
+      ? { lat: lat, lon: lon } : null;
+  }
+  function placeFromCsv() {
+    var n = 0;
+    active().forEach(function (it) {
+      if (QDGeo.position(it)) return;
+      var ll = csvLatLon(it);
+      if (ll) { it.geo = { lat: ll.lat, lon: ll.lon, source: 'csv' }; n++; }
+    });
+    changed();
+    if (map && n) fitToPhotos();
+  }
+
   function renderSide() {
     var items = active();
-    var n = { exif: 0, track: 0, map: 0 }, without = [], pending = 0;
+    var n = { exif: 0, track: 0, map: 0, csv: 0 }, without = [], pending = 0;
     items.forEach(function (it) {
       var p = QDGeo.position(it);
       if (p) n[p.source]++;
       else if (!processed(it)) pending++;
       else without.push(it);
     });
-    var withPos = n.exif + n.track + n.map;
+    var withPos = n.exif + n.track + n.map + n.csv;
     el('mapStats').innerHTML = '<b>' + withPos + '</b> with a position'
-      + (withPos ? ' <span class="muted">(camera ' + n.exif + ' · track ' + n.track + ' · map ' + n.map + ')</span>' : '')
+      + (withPos ? ' <span class="muted">(camera ' + n.exif + ' · track ' + n.track + ' · map ' + n.map
+        + (n.csv ? ' · CSV ' + n.csv : '') + ')</span>' : '')
       + ' · <b>' + without.length + '</b> without'
       + (pending ? ' · <span class="muted">' + pending + ' still processing</span>' : '');
 
@@ -361,10 +419,16 @@
     list.innerHTML = shown.length ? shown.slice(0, 500).map(function (it) {
       return '<label class="map-item"><input type="checkbox" data-id="' + it.id + '"' + (st.selected[it.id] ? ' checked' : '') + '>'
         + (it.thumbURL ? '<img src="' + esc(it.thumbURL) + '" alt="" loading="lazy">' : '<span class="noimg"></span>')
-        + '<span>' + esc(it.name) + '<br><span class="muted">' + esc(it.exif && it.exif.dateTimeOriginal || 'no camera time') + '</span></span></label>';
+        + metaBlock(it) + '</label>';
     }).join('') + (shown.length > 500 ? '<p class="muted">… and ' + (shown.length - 500) + ' more (use “Select all”).</p>' : '')
       : '<p class="muted">' + (items.length ? 'Every photo has a position.' : 'Add photos first.') + '</p>';
     list.dataset.ids = shown.map(function (it) { return it.id; }).join(',');
+
+    // photos whose joined metadata CSV already has coordinates
+    var fromCsv = without.filter(function (it) { return csvLatLon(it); });
+    var bc = el('btnMapFromCsv');
+    bc.hidden = !fromCsv.length;
+    bc.textContent = 'Use the coordinates of the metadata CSV (' + fromCsv.length + ')';
 
     var nsel = Object.keys(st.selected).length;
     el('mapPlaceHint').innerHTML = st.moveId
@@ -549,6 +613,7 @@
       st.moveId = null; renderSide();
     });
     el('btnMapSelectNone').addEventListener('click', function () { st.selected = {}; renderSide(); });
+    el('btnMapFromCsv').addEventListener('click', placeFromCsv);
     el('mapGroupFilter').addEventListener('change', function () { st.groupFilter = el('mapGroupFilter').value; renderSide(); });
     el('btnMapFit').addEventListener('click', function () { if (map) fitToPhotos(); });
     document.addEventListener('keydown', function (e) {
