@@ -272,6 +272,7 @@
     <label class="block">ArcGIS API key (optional, Map tab)
       <input type="text" id="arcgisKeyInput" spellcheck="false" autocomplete="off" placeholder="AAPK…">
     </label>
+    <p class="muted small" id="arcgisSiteNote" hidden>This site already provides a key: leave the field empty to use it.</p>
     <p class="muted small">Adds high-resolution Esri World Imagery to the Map tab.
        Free key from an ArcGIS Location Platform account (privilege: basemaps).
        Without it the map uses Sentinel-2 cloudless (10 m) and OpenStreetMap.</p>
@@ -347,6 +348,7 @@
   </div>
 </footer>
 
+<script src="js/site-config.js"></script>
 <script src="js/qd.js"></script>
 <script src="js/exif.js"></script>
 <script src="js/raw.js"></script>

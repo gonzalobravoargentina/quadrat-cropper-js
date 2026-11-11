@@ -937,6 +937,7 @@
     el('cropSizeMode').value = /^\d+$/.test(cs) ? 'fixed' : cs;
     el('cropSizePx').value = /^\d+$/.test(cs) ? cs : 1600;
     try { el('arcgisKeyInput').value = localStorage.getItem('quadrat.arcgisKey') || ''; } catch (e) { /* private mode */ }
+    el('arcgisSiteNote').hidden = !(window.QD_SITE_CONFIG && window.QD_SITE_CONFIG.arcgisKey);
     ui.settingsDialog.showModal();
   }
   function saveSettings() {

@@ -50,6 +50,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.14.0 | Metadata tab: download only the metadata CSV | §16 |
 | 1.14.1 | Map tab: zoom to ~2 cm/pixel on every basemap | §17 |
 | 1.14.2 | Map tab: Esri imagery depth detected per place (no grey tiles) | §17 |
+| 1.14.3 | `js/site-config.js`: optional site-wide ArcGIS key for hosted copies | §18 |
 
 ---
 
@@ -570,4 +571,29 @@ z17): it probed 19, 18, 17 and then requested z17 tiles at zoom 22.
 
 **Tested:** with 86 geotagged photos spread over ~35 × 73 m, the map zooms
 to the limit (scale bar 2 m) and the markers stay distinct.
+
+---
+
+## 18. Per-site configuration (v1.14.3, part 11 of the stack)
+
+**Why:** a hosted copy of the tool, such as the one at
+culturaoceanica.org/fotocuadrantes/ used for courses, should show
+high-resolution Esri imagery to every visitor. Each visitor should not have
+to create an ArcGIS key, and the key must not live in the shared code.
+
+**What:**
+- New `js/site-config.js`, loaded before everything else. In this
+  repository it sets `window.QD_SITE_CONFIG = { arcgisKey: '' }`, i.e. no
+  behaviour change.
+- A deployment can overwrite that file at deploy time, for example from a
+  CI variable, with a key that has only the Basemaps privilege and is
+  restricted to its domain.
+- `maptab.js`: a key set in ⚙ wins; otherwise the site key is used.
+- When Esri is available and the user never picked a basemap, the map
+  opens on Esri; otherwise it opens on Sentinel-2 as before.
+- ⚙ shows a note when the site already provides a key.
+
+**Tested:** without a site key, the layers and the default basemap are
+unchanged. With a site key (served by a mocked `site-config.js`), Esri is
+listed, selected and loads, and the ⚙ note shows.
 

@@ -53,13 +53,18 @@
   function loadCfg() {
     var d = {
       camTz: -new Date().getTimezoneOffset(), useExifOffset: true, csvTz: 0,
-      offset: '', maxGap: 60, edgeTol: 30, overwrite: false, base: 's2'
+      offset: '', maxGap: 60, edgeTol: 30, overwrite: false, base: ''   // '' = best available (Esri if a key exists)
     };
     try { var s = JSON.parse(localStorage.getItem('quadrat.gpsMerge') || '{}'); Object.keys(s).forEach(function (k) { d[k] = s[k]; }); } catch (e) { /* private mode */ }
     return d;
   }
   function saveCfg() { try { localStorage.setItem('quadrat.gpsMerge', JSON.stringify(cfg)); } catch (e) { /* private mode */ } }
-  function arcgisKey() { try { return localStorage.getItem('quadrat.arcgisKey') || ''; } catch (e) { return ''; } }
+  function arcgisKey() {
+    var own = '';
+    try { own = localStorage.getItem('quadrat.arcgisKey') || ''; } catch (e) { /* private mode */ }
+    // a key set in ⚙ wins; otherwise the hosting site's key (js/site-config.js)
+    return own || (root.QD_SITE_CONFIG && root.QD_SITE_CONFIG.arcgisKey) || '';
+  }
 
   // ------------------------------------------------------------ Leaflet
 
@@ -123,7 +128,9 @@
       map = L.map('mapView', { preferCanvas: true, worldCopyJump: true, maxZoom: MAX_ZOOM }).setView([-42, -64], 4);
       layers = makeBaseLayers();
       var names = Object.keys(layers);
-      var pick = names.filter(function (n) { return n.indexOf(cfg.base === 'esri' ? 'Esri' : cfg.base === 'osm' ? 'OpenStreetMap' : 'Sentinel') >= 0; })[0] || names[0];
+      var want = cfg.base === 'osm' ? 'OpenStreetMap' : cfg.base === 's2' ? 'Sentinel' : 'Esri';
+      var pick = names.filter(function (n) { return n.indexOf(want) >= 0; })[0]
+        || names.filter(function (n) { return n.indexOf('Sentinel') >= 0; })[0] || names[0];
       layers[pick].addTo(map);
       layerControl = L.control.layers(layers, null, { collapsed: true }).addTo(map);
       L.control.scale({ imperial: false }).addTo(map);
