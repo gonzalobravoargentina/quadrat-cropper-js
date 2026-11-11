@@ -227,6 +227,8 @@ For sub-metre satellite imagery add a free **ArcGIS Location Platform API
 key** in ⚙ — the map then offers **Esri World Imagery**. The map library
 (Leaflet 1.9.4, BSD-2) is vendored in `vendor/` and loaded only when the tab
 is first opened.
+A site hosting its own copy can provide an ArcGIS key for every visitor by
+overwriting `js/site-config.js` at deploy time (empty in this repository).
 
 ## Google Drive sign-in (only for auto-listing whole folders)
 
