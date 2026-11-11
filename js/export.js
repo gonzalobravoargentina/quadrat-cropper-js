@@ -173,7 +173,7 @@
         (it.exif && it.exif.model) || '',
         (it.exif && (it.exif.dateTimeOriginal || it.exif.modifyDate)) || '',
         it.driveId || '',
-        (root.QDMetaTab && root.QDMetaTab.groupOf(it)) || '',
+        (root.QDMetaTab && root.QDMetaTab.groupLabel ? root.QDMetaTab.groupLabel(it) : (it.group || '')),
         it.cropSide || '',
         fileName ? (outSide || it.cropSide || '') : '',
         // position: camera EXIF GPS or set in the Map tab (geo.js)

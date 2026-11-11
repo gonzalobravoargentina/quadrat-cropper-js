@@ -201,7 +201,8 @@
 
   function processed(it) { return it.status !== 'queued' && it.status !== 'processing'; }
   function active() { return getItems().filter(function (it) { return !it.excluded; }); }
-  function groupOf(it) { return root.QDMetaTab && root.QDMetaTab.groupOf ? root.QDMetaTab.groupOf(it) : (it.group || ''); }
+  // folder of a photo for display and the folder filter ('' = loaded without a folder)
+  function groupOf(it) { return root.QDMetaTab && root.QDMetaTab.groupLabel ? root.QDMetaTab.groupLabel(it) : (it.group || ''); }
   function byId(id) { return getItems().filter(function (it) { return it.id === id; })[0]; }
   function timeOpts() {
     return {
@@ -347,7 +348,7 @@
         && String(r[1]).toLowerCase() === String(csv[k]).toLowerCase(); })) return;
       rows.push([k + ' (CSV)', csv[k]]);
     });
-    rows.push(['folder', groupOf(it)]);
+    rows.push(['folder', groupOf(it) || '(no folder)']);
     return rows;
   }
   function metaBlock(it) {

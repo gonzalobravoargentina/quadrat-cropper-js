@@ -18,7 +18,7 @@
 
   var STRATA = ['HIGHTIDE', 'MIDTIDE', 'LOWTIDE'];
   var SEASONS = ['FRIO', 'CALIDO'];
-  var REEF_AREAS = ['horizontal', 'vertical'];
+  var REEF_AREAS = ['horizontal', 'vertical', 'overhang', 'cavefloor'];
   var YES_NO = ['no', 'yes'];
 
   // Localities already monitored: state + AMP code (Comments), from the
@@ -157,14 +157,23 @@
 
   // ------------------------------------------------------------- groups
 
-  /** Group key of a photo: its source folder, or the load it came with. */
-  function groupOf(it) { return it.group || 'Ungrouped'; }
+  /**
+   * Group key of a photo: its source folder (Drive subfolder, zip folder,
+   * picked/dropped folder). Photos loaded WITHOUT a folder (loose files, a
+   * single Drive link) are each their own group, so the Metadata tab shows
+   * one row per photo and each can get its own values. Key '§' + item id
+   * (never a folder path); groupLabel() is what is shown / exported.
+   */
+  var SINGLE = '\u00a7';
+  function groupOf(it) { return it.group || SINGLE + it.id; }
+  function isSingle(key) { return String(key).charAt(0) === SINGLE; }
+  function groupLabel(it) { return it.group || ''; }
 
   function groupList() {
     var map = {}, order = [];
     getItems().forEach(function (it) {
       var g = groupOf(it);
-      if (!map[g]) { map[g] = { key: g, n: 0, nExport: 0 }; order.push(g); }
+      if (!map[g]) { map[g] = { key: g, n: 0, nExport: 0, single: isSingle(g), name: it.name }; order.push(g); }
       map[g].n++;
     });
     return order.map(function (k) { return map[k]; });
@@ -203,7 +212,7 @@
    */
   function folderGuess(groupKey) {
     var parts = String(groupKey).split('/').map(function (x) { return x.trim(); }).filter(Boolean);
-    if (!parts.length || groupKey === 'Ungrouped' || /^Load \d+$/.test(groupKey)) return {};
+    if (!parts.length || groupKey === 'Ungrouped' || isSingle(groupKey) || /^Load \d+$/.test(groupKey)) return {};
     var out = {}, i = parts.length - 1;
     var sv = normStrata(parts[i]);
     if (sv) { out.strata = sv; i--; }
@@ -246,6 +255,7 @@
    * anywhere in the path → strata. Everything else comes from the defaults.
    */
   function azoresGuess(groupKey) {
+    if (isSingle(groupKey)) return {};
     var parts = String(groupKey).split('/').filter(Boolean), out = {};
     for (var i = parts.length - 1; i >= 0; i--) {
       var m = /(?:GROUP|GRUPO|GRUPPE|TRANSECT|TRANSECTA|TRANSECTO)[\s_-]*(\d+)/i.exec(parts[i]);
@@ -258,7 +268,8 @@
 
   /**
    * Subtidal folders, read from the deepest folder up: a reef-area folder
-   * (VERTICAL / HORIZONTAL, PARED / PISO, WALL / FLOOR …) → reef area; the
+   * (VERTICAL / HORIZONTAL / OVERHANG / CAVEFLOOR, PARED / PISO / ALERO /
+   * CUEVA, WALL / FLOOR …) → reef area; the
    * folders above → reef name, site, region (year and season folders are
    * skipped). E.g. ISLA DE LOS ESTADOS/2022/HOPPNER/HOPPNER I/VERTICAL.
    */
@@ -266,11 +277,13 @@
     var s = normKey(v);
     if (/^(VERTICAL|VERT|PARED|WALL)$/.test(s)) return 'vertical';
     if (/^(HORIZONTAL|HORIZ|PISO|FLOOR|FONDO)$/.test(s)) return 'horizontal';
+    if (/^(OVERHANG|ALERO|TECHO|CEILING|EXTRAPLOMO|EXTRAPLOMADO)$/.test(s)) return 'overhang';
+    if (/^(CAVE ?FLOOR|CAVE_FLOOR|CUEVA|PISO (DE )?CUEVA|FONDO (DE )?CUEVA)$/.test(s)) return 'cavefloor';
     return '';
   }
   function subtidalGuess(groupKey) {
     var parts = String(groupKey).split('/').map(function (x) { return x.trim(); }).filter(Boolean);
-    if (!parts.length || groupKey === 'Ungrouped' || /^Load \d+$/.test(groupKey)) return {};
+    if (!parts.length || groupKey === 'Ungrouped' || isSingle(groupKey) || /^Load \d+$/.test(groupKey)) return {};
     var out = {}, named = [];
     for (var i = parts.length - 1; i >= 0; i--) {
       var ra = normReefArea(parts[i]);
@@ -374,7 +387,7 @@
       var k = groupOf(it); if (seen[k]) return; seen[k] = true;
       var v = valuesFor(k);
       var miss = p.fields.filter(function (f) { return f.required && !fieldValue(p, v, f.key); }).map(function (f) { return f.key; });
-      if (miss.length) out.push(k + ': ' + miss.join(', '));
+      if (miss.length) out.push((isSingle(k) ? it.name : k) + ': ' + miss.join(', '));
     });
     return out;
   }
@@ -403,6 +416,11 @@
       ui.body.innerHTML = html + '<p class="muted">Load photos first: each source folder becomes a group here.</p>';
       return;
     }
+    var nSingle = groups.filter(function (g) { return g.single; }).length;
+    if (nSingle) {
+      html += '<p class="muted small">' + nSingle + ' photo' + (nSingle > 1 ? 's were' : ' was')
+        + ' loaded without a folder: one row per photo (📷). Use ⇣ to copy the first row\'s value down a column.</p>';
+    }
     html += '<div class="meta-scroll"><table class="meta-table"><thead><tr><th>Folder / group</th><th>#</th>';
     p.fields.forEach(function (f) {
       html += '<th>' + esc(f.key) + (f.required ? ' <span class="req">*</span>' : '')
@@ -414,7 +432,9 @@
       var v = valuesFor(g.key);
       // the deepest folders are what tells groups apart: show the path's tail
       var parts = g.key.split('/'), shown = parts.length > 3 ? '…/' + parts.slice(-3).join('/') : g.key;
-      html += '<tr><td class="gname" title="' + esc(g.key) + '">' + esc(shown) + '</td><td>' + g.n + '</td>';
+      if (g.single) shown = '📷 ' + g.name;       // photo loaded without a folder: its own row
+      html += '<tr><td class="gname" title="' + esc(g.single ? g.name + ' (no folder: one row per photo)' : g.key) + '">'
+        + esc(shown) + '</td><td>' + g.n + '</td>';
       p.fields.forEach(function (f) {
         var val = v[f.key] || '', cls = (f.required && !val) ? ' class="missing"' : '';
         if (f.options) {
@@ -478,7 +498,7 @@
   }
 
   root.QDMetaTab = {
-    init: init, render: render, exportInfo: exportInfo, groupOf: groupOf, summaryFor: summaryFor,
+    init: init, render: render, exportInfo: exportInfo, groupOf: groupOf, groupLabel: groupLabel, summaryFor: summaryFor,
     _subtidalGuess: subtidalGuess,
     _folderGuess: folderGuess, _azoresGuess: azoresGuess, _normStrata: normStrata, PRESETS: PRESETS
   };

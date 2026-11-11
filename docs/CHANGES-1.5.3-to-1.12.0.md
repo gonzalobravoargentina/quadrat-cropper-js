@@ -54,6 +54,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.15.0 | Fixed-size suggested square; settings re-crop processed photos; ZIP default = native size | §19 |
 | 1.15.1 | "All photos loaded and processed" notice | §20 |
 | 1.16.0 | Subtidal metadata preset; photo metadata + metadata-CSV coordinates in the Map tab | §21 |
+| 1.16.1 | Reef area overhang / cavefloor; one metadata row per photo loaded without a folder | §22 |
 
 ---
 
@@ -725,4 +726,35 @@ covers 4 of them):
 - The Map list shows the values.
 - The CSV button placed exactly the 4 photos that have coordinates.
 - The downloaded metadata CSV header is byte-identical to the team's file.
+
+---
+
+## 22. More reef areas; one row per photo without a folder (v1.16.1, part 15 of the stack)
+
+**Why:**
+- The subtidal protocol uses four reef areas: horizontal, vertical,
+  overhang and cavefloor.
+- Photos loaded **without a folder** (loose files, a single Drive link)
+  were all put in one group (`Load N`). They could only share one set of
+  metadata values.
+
+**What:**
+- `reef area` options are now horizontal / vertical / overhang / cavefloor.
+  The folder parser also recognises OVERHANG / ALERO / TECHO and
+  CAVEFLOOR / CAVE FLOOR / CUEVA.
+- `metatab.js` `groupOf()`: a photo without a folder is its own group.
+  - The key is `§` + item id, never a folder path. Folder parsers ignore it.
+  - The Metadata tab shows **one row per photo** (📷 file name), with a
+    note. ⇣ still copies the first row's value down a column.
+  - `groupLabel()` gives the folder ('' for such photos). The manifest's
+    `group` column and the Map tab's folder filter use it, so the filter
+    shows "(no folder)".
+- `app.js`: loose files no longer get a `Load N` group.
+
+**Tested** (headless Chromium, 3 loose photos + a folder of 5):
+- The Metadata tab shows 3 📷 rows plus the folder row.
+- reef area offers the four values.
+- Values set per photo (site A/B, overhang/cavefloor) come out per photo in
+  the downloaded CSV.
+- The Map filter shows "(no folder) (3)".
 

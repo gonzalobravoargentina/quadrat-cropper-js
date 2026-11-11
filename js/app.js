@@ -177,7 +177,6 @@
 
   function addFiles(fileList) {
     var files = Array.from(fileList);
-    var load = 'Load ' + (++loadCount);
     // CSVs inside a picked/dropped folder are metadata (same as in a zip or a
     // Drive folder): read them before the photos are queued so they join
     var csvFiles = files.filter(function (f) { return /\.csv$/i.test(f.name); });
@@ -198,8 +197,9 @@
     if (!imgs.length) return;
     imgs.forEach(function (f) {
       var it = newItem(f.name, f, null);
-      // folder of a dropped / picked folder, else this load as one group
-      it.group = dirOf(f._relPath || f.webkitRelativePath) || load;
+      // folder of a dropped / picked folder; loose files get no group, so the
+      // Metadata tab shows one row per photo (metatab.js groupOf)
+      it.group = dirOf(f._relPath || f.webkitRelativePath) || '';
       state.items.push(it);
     });
     render();
