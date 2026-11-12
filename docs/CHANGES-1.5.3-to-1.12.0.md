@@ -56,6 +56,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.16.0 | Subtidal metadata preset; photo metadata + metadata-CSV coordinates in the Map tab | §21 |
 | 1.16.1 | Reef area overhang / cavefloor; one metadata row per photo loaded without a folder | §22 |
 | 1.16.2 | Detector: bright-yellow colour pass (yellow rig on green ulva / pale sand) | §23 |
+| 1.16.3 | Metadata tab: "One row per photo" switch, also for photos inside a folder | §24 |
 
 ---
 
@@ -801,4 +802,34 @@ covers 4 of them):
 - 86 frameless subtidal photos (FOTOCUADRANTES): no new detections.
 - Tried and **rejected**: dropping ray hits near the origin. It fixed the
   same photos but let 22 frameless photos produce false crops.
+
+---
+
+## 24. "One row per photo" in the Metadata tab (v1.16.3, part 17 of the stack)
+
+**Why:**
+- §22 gave one row per photo only to photos loaded **without** a folder.
+- A user loaded one folder of photos and expected to set metadata photo by
+  photo. Folder grouping gave them a single row for the whole folder.
+
+**What (`js/metatab.js`, `index.html`):**
+- New checkbox **One row per photo** in the Metadata tab header
+  (`#metaPerPhoto`). Saved in `quadrat.meta.v2` as `perPhoto`.
+- `groupOf(it)`: with the switch on, every photo is its own group. The
+  single-photo key is now `§` + id + `§` + folder. It is still never a bare
+  folder path, so folder parsers ignore it. `folderOfKey()` recovers the
+  folder, so the preset guesses (e.g. reef name from the folder) still apply.
+- A new photo row starts from its folder row's values when those were filled
+  in, so ticking the box keeps what was already typed.
+- With one folder and the switch off, the tab now says how to get one row per
+  photo.
+- Export (`groupLabel`), the manifest and the Map tab are unchanged: they
+  still report the folder.
+
+**Tested** (headless Chromium):
+- A folder of 3 photos shows 1 row plus the hint. Typed `site` = FOLDER SITE,
+  then ticked the box: 3 📷 rows, all with FOLDER SITE and the guessed
+  `reef name`. Changed one to OTHER.
+- The metadata CSV has per-photo values. The switch survives a reload.
+- The §22 test (loose files plus a folder) gives the same result as before.
 

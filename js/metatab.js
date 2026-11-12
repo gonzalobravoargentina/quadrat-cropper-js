@@ -145,12 +145,13 @@
       var s = JSON.parse(localStorage.getItem(LS) || '{}');
       if (s.preset) st.preset = s.preset;
       if (s.nameFormat) st.nameFormat = s.nameFormat;
+      st.perPhoto = !!s.perPhoto;
       st.last = s.last || {};
       st.known = s.known || {};
     } catch (e) { /* private mode */ }
   }
   function save() {
-    try { localStorage.setItem(LS, JSON.stringify({ preset: st.preset, nameFormat: st.nameFormat, last: st.last, known: st.known })); } catch (e) { /* private mode */ }
+    try { localStorage.setItem(LS, JSON.stringify({ preset: st.preset, nameFormat: st.nameFormat, perPhoto: st.perPhoto, last: st.last, known: st.known })); } catch (e) { /* private mode */ }
   }
 
   function preset() { return PRESETS[st.preset] || null; }
@@ -161,19 +162,23 @@
    * Group key of a photo: its source folder (Drive subfolder, zip folder,
    * picked/dropped folder). Photos loaded WITHOUT a folder (loose files, a
    * single Drive link) are each their own group, so the Metadata tab shows
-   * one row per photo and each can get its own values. Key '§' + item id
-   * (never a folder path); groupLabel() is what is shown / exported.
+   * one row per photo and each can get its own values. With "One row per
+   * photo" ticked (st.perPhoto) EVERY photo is its own group, also inside a
+   * folder. Single key = '§' + item id + '§' + its folder (never a bare
+   * folder path, so folder parsers skip it; folderOfKey() recovers the
+   * folder for the guesses). groupLabel() is what is shown / exported.
    */
   var SINGLE = '\u00a7';
-  function groupOf(it) { return it.group || SINGLE + it.id; }
+  function groupOf(it) { return (it.group && !st.perPhoto) ? it.group : SINGLE + it.id + SINGLE + (it.group || ''); }
   function isSingle(key) { return String(key).charAt(0) === SINGLE; }
+  function folderOfKey(key) { return isSingle(key) ? String(key).split(SINGLE)[2] || '' : key; }
   function groupLabel(it) { return it.group || ''; }
 
   function groupList() {
     var map = {}, order = [];
     getItems().forEach(function (it) {
       var g = groupOf(it);
-      if (!map[g]) { map[g] = { key: g, n: 0, nExport: 0, single: isSingle(g), name: it.name }; order.push(g); }
+      if (!map[g]) { map[g] = { key: g, n: 0, nExport: 0, single: isSingle(g), name: it.name, folder: it.group || '' }; order.push(g); }
       map[g].n++;
     });
     return order.map(function (k) { return map[k]; });
@@ -237,11 +242,14 @@
 
   function valuesFor(groupKey) {
     if (!st.groups[groupKey]) {
-      var v = {}, p = preset();
+      var v = {}, p = preset(), folder = folderOfKey(groupKey);
+      // a photo row starts from its folder's row when that one was filled in
+      // (e.g. right after ticking "One row per photo")
+      var fromFolder = (isSingle(groupKey) && folder && st.groups[folder]) || null;
       if (p) {
-        var guess = p.guess ? p.guess(groupKey) : {};
+        var guess = p.guess && folder ? p.guess(folder) : {};
         p.fields.forEach(function (f) {
-          v[f.key] = guess[f.key] || f.default || (f.remember ? (st.last[f.key] || '') : '');
+          v[f.key] = (fromFolder && fromFolder[f.key]) || guess[f.key] || f.default || (f.remember ? (st.last[f.key] || '') : '');
         });
       }
       st.groups[groupKey] = v;
@@ -417,7 +425,12 @@
       return;
     }
     var nSingle = groups.filter(function (g) { return g.single; }).length;
-    if (nSingle) {
+    if (st.perPhoto) {
+      html += '<p class="muted small">One row per photo (📷). Each starts from its folder\'s values; '
+        + 'use ⇣ to copy the first row\'s value down a column.</p>';
+    } else if (groups.length === 1) {
+      html += '<p class="muted small">All photos share this row. To give each photo its own values, tick <b>One row per photo</b>.</p>';
+    } else if (nSingle) {
       html += '<p class="muted small">' + nSingle + ' photo' + (nSingle > 1 ? 's were' : ' was')
         + ' loaded without a folder: one row per photo (📷). Use ⇣ to copy the first row\'s value down a column.</p>';
     }
@@ -432,8 +445,8 @@
       var v = valuesFor(g.key);
       // the deepest folders are what tells groups apart: show the path's tail
       var parts = g.key.split('/'), shown = parts.length > 3 ? '…/' + parts.slice(-3).join('/') : g.key;
-      if (g.single) shown = '📷 ' + g.name;       // photo loaded without a folder: its own row
-      html += '<tr><td class="gname" title="' + esc(g.single ? g.name + ' (no folder: one row per photo)' : g.key) + '">'
+      if (g.single) shown = '📷 ' + g.name;       // photo as its own row
+      html += '<tr><td class="gname" title="' + esc(g.single ? g.name + (g.folder ? ' — ' + g.folder : ' (no folder)') : g.key) + '">'
         + esc(shown) + '</td><td>' + g.n + '</td>';
       p.fields.forEach(function (f) {
         var val = v[f.key] || '', cls = (f.required && !val) ? ' class="missing"' : '';
@@ -484,6 +497,14 @@
     ui.body = document.getElementById('metaBody');
     ui.presetSel = document.getElementById('metaPreset');
     ui.nameSel = document.getElementById('metaNameFormat');
+    ui.perPhoto = document.getElementById('metaPerPhoto');
+    if (ui.perPhoto) {
+      ui.perPhoto.checked = st.perPhoto;
+      ui.perPhoto.addEventListener('change', function () {
+        st.perPhoto = ui.perPhoto.checked; save(); render();
+        if (ui.onChange) ui.onChange();           // export / map read the new rows
+      });
+    }
     ui.presetSel.innerHTML = Object.keys(PRESETS).map(function (k) { return '<option value="' + k + '">' + esc(PRESETS[k].label) + '</option>'; }).join('')
       + '<option value="none">None — no metadata file</option>';
     ui.presetSel.addEventListener('change', function () { st.preset = ui.presetSel.value; st.groups = {}; save(); render(); });

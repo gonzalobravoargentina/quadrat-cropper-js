@@ -145,7 +145,9 @@ Photos are grouped by their **source folder** — Drive subfolders, folders
 inside a zip, or a folder added with **＋ Add folder** / dropped from Finder
 (e.g. a Google Drive for desktop folder). The **Metadata** tab shows one row
 per group; fill the fields once per group (⇣ copies the first row down a
-column). With the **Intertidal — MBON Pole to Pole (CoralNet)** preset:
+column). Tick **One row per photo** to give every photo its own row, also
+inside a folder: each starts from its folder's values (photos loaded without
+a folder always get their own row). With the **Intertidal — MBON Pole to Pole (CoralNet)** preset:
 
 - read from each photo: `Name`, `Date`, `Latitude`, `Longitude`, `Camera`
   (EXIF date, GPS and model);
