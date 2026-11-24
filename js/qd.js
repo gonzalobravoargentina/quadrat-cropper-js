@@ -39,7 +39,7 @@
   // Detector version — bumped when qd.js or its calling contract changes.
   // app.js surfaces this in the page title / header so users can confirm
   // they are running a fresh build (not a cached one).
-  var VERSION = '1.16.2';
+  var VERSION = '1.16.3';
 
   var DEFAULTS = {
     workWidth: 1152,
@@ -113,6 +113,19 @@
       color: 'yellowBright',
       hueMin: 44, hueMax: 70, satMin: 0.15, valMin: 0.62,
       highlightHueMin: 30, highlightHueMax: 85,
+    },
+    // Orange PVC rig with black tape bands (Canon, sandy bottom, 2026):
+    // tube at hue ~28-40, sat 0.4-0.55; sand/water around it at hue 140-170.
+    // The wide yellow band (42-82) only catches the tube's yellowish edge
+    // and gives skewed sides. Fallback pass, gated like yellowBright so
+    // brown algae / rock (same hues) can't make a weak quad on frameless shots.
+    orange: {
+      color: 'orange',
+      hueMin: 14, hueMax: 44, satMin: 0.30, valMin: 0.30,
+      highlightHueMin: 5, highlightHueMax: 50,
+      // the black tape bands cut each rail into short orange pieces, so rays
+      // escape through the gaps: bridge short gaps along rows and columns
+      bridgeGaps: 0.06,
     },
     // Same mint PVC as seen by the Olympus/OM TG-6/TG-7 (the P2P protocol
     // camera): its rendering puts the tube at hue ~165-185 in air and ~180-
@@ -456,6 +469,55 @@
     return null;
   }
 
+  /**
+   * Fill short gaps (≤ frac·W along rows, ≤ frac·H along columns) between
+   * mask pixels: joins a rail interrupted by tape bands without closing the
+   * opening (far wider than the gap). Only for passes that set bridgeGaps.
+   */
+  function bridgeMaskGaps(mask, W, H, frac) {
+    var out = mask.slice(), x, y, last, Lx = Math.round(frac * W), Ly = Math.round(frac * H);
+    for (y = 0; y < H; y++) {
+      last = -1;
+      for (x = 0; x < W; x++) if (mask[y * W + x]) {
+        if (last >= 0 && x - last > 1 && x - last - 1 <= Lx) for (var k = last + 1; k < x; k++) out[y * W + k] = 1;
+        last = x;
+      }
+    }
+    for (x = 0; x < W; x++) {
+      last = -1;
+      for (y = 0; y < H; y++) if (mask[y * W + x]) {
+        if (last >= 0 && y - last > 1 && y - last - 1 <= Ly) for (var k2 = last + 1; k2 < y; k2++) out[k2 * W + x] = 1;
+        last = y;
+      }
+    }
+    mask.set(out);
+  }
+
+  /**
+   * Fraction of in-band pixels just OUTSIDE each side of a quad (where the
+   * tube should be), sampled along the side at 1-8 % of the side length.
+   * Returns the weakest side. Used to accept an orange result only when
+   * the rails themselves are orange (a yellow rig on rust-brown rock can
+   * also close an orange quad, but its rails are yellow).
+   */
+  function railSupport(mask, W, H, quadW) {
+    var cx = 0, cy = 0, i; for (i = 0; i < 4; i++) { cx += quadW[i].x / 4; cy += quadW[i].y / 4; }
+    var worst = 1;
+    for (i = 0; i < 4; i++) {
+      var a = quadW[i], b = quadW[(i + 1) % 4], dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1;
+      var nx = -dy / L, ny = dx / L, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      if ((mx - cx) * nx + (my - cy) * ny < 0) { nx = -nx; ny = -ny; }   // outward
+      var hit = 0, tot = 0;
+      for (var t = 0.1; t <= 0.9001; t += 0.04) for (var d = 0.01; d <= 0.0801; d += 0.01) {
+        var x = Math.round(a.x + dx * t + nx * d * L), y = Math.round(a.y + dy * t + ny * d * L);
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        tot++; if (mask[y * W + x]) hit++;
+      }
+      worst = Math.min(worst, tot ? hit / tot : 0);
+    }
+    return worst;
+  }
+
   /** Mask post-processing hook (currently: highlight-aware tube fill). */
   function floodHints(mk, scaled, opts) {
     floodHighlights(mk.mask, scaled.width, scaled.height, scaled, opts);
@@ -711,7 +773,7 @@
     var scaled = scale < 1 ? boxScale(image, Math.round(srcW * scale), Math.round(srcH * scale))
                            : { width: image.width, height: image.height, data: image.data };
 
-    var names = ['mint', 'yellow', 'yellowBright', 'cyan', 'white'];
+    var names = ['mint', 'yellow', 'yellowBright', 'orange', 'cyan', 'white'];
     if (options && options.color === 'yellow') names = ['yellow', 'yellowBright'];
     else if (options && FRAME_COLORS[options.color]) names = [options.color];
     else if (options && (options.hueMin !== undefined || options.satMin !== undefined || options.valMin !== undefined)) {
@@ -731,7 +793,7 @@
     for (var pi = 0; pi < names.length; pi++) {
       var nm = names[pi];
       // fallback pass: skip it when an earlier color is already confident
-      if ((nm === 'cyan' || nm === 'white') && bestConf >= 0.8) continue;
+      if ((nm === 'cyan' || nm === 'white' || nm === 'orange') && bestConf >= 0.8) continue;
       // bright-yellow second opinion: whenever the wide yellow band is the
       // one in the lead (an ulva-flooded mask can still score ~0.8-0.9 with
       // a skewed side), or nothing is confident yet
@@ -750,7 +812,16 @@
       // frameless (pre-cropped) subtidal shots, where it can assemble a weak
       // texture quad (measured conf 0.45-0.55); real rigs score ≥ 0.8. Only
       // a confident bright pass may compete — otherwise drop it unseen.
-      if (nm === 'yellowBright' && res.confidence < (opts.yellowBrightMinConf || 0.7)) continue;
+      if ((nm === 'yellowBright' || nm === 'orange') && res.ok && res.confidence < (opts.yellowBrightMinConf || 0.7)) continue;
+      // orange must be the rails' own colour: measured weakest side 0.33-0.44
+      // on the orange rig vs 0.06-0.14 for yellow rigs on rust-brown rock
+      if (nm === 'orange' && res.ok && res.quad) {
+        var om = buildMask(scaled, passOpts).mask, sw = scaled.width, sh = scaled.height;
+        var qw = res.quad.map(function (p) { return { x: p.x * scale, y: p.y * scale }; });
+        var sup = railSupport(om, sw, sh, qw);
+        res.diagnostics.railSupport = +sup.toFixed(2);
+        if (sup < (opts.orangeRailMin || 0.25)) continue;
+      }
       passResults.push(res);
       if (res.confidence > bestConf + 1e-9) { best = res; bestName = passOpts.color; bestConf = res.confidence; }
     }
@@ -781,6 +852,7 @@
     var mk = buildMask(scaled, opts);
     floodHints(mk, scaled, opts);
     if (opts.maskSmooth) smoothMask(mk.mask, W, H, opts.maskSmooth);
+    if (opts.bridgeGaps) bridgeMaskGaps(mk.mask, W, H, opts.bridgeGaps);
     // Ray origin: the geometric middle of the frame (see centerOrigin) — the
     // protocol centers the quadrat in the shot, so the tube wall must be
     // visible from the middle in essentially every direction; otherwise the

@@ -56,6 +56,7 @@ The commits are small and themed, so `git log --oneline main..` reads like a cha
 | 1.16.0 | Subtidal metadata preset; photo metadata + metadata-CSV coordinates in the Map tab | §21 |
 | 1.16.1 | Reef area overhang / cavefloor; one metadata row per photo loaded without a folder | §22 |
 | 1.16.2 | Detector: bright-yellow colour pass (yellow rig on green ulva / pale sand) | §23 |
+| 1.16.3 | Detector: orange colour pass (orange rig with black tape bands) | §24 |
 
 ---
 
@@ -801,4 +802,44 @@ covers 4 of them):
 - 86 frameless subtidal photos (FOTOCUADRANTES): no new detections.
 - Tried and **rejected**: dropping ray hits near the origin. It fixed the
   same photos but let 22 frameless photos produce false crops.
+
+---
+
+## 24. Orange colour pass (v1.16.3, part 17 of the stack)
+
+**Why:**
+- New rig type: orange PVC frame with black tape bands, orange side rods,
+  on sand (Canon CR2; the embedded camera JPEG is 1600×1200).
+- No pass saw it properly. The wide yellow band caught only the tubes'
+  yellowish edges (conf 0.62-0.70, skewed sides).
+- Measured: tube hue 28-40, sat 0.4-0.55; sand and water hue 140-170. The
+  tape bands cut each rail into short orange pieces, so rays escaped
+  through the gaps ("opening not centered").
+
+**What (`js/qd.js` only):**
+- New `FRAME_COLORS.orange`: hue 14-44, sat ≥ 0.30, value ≥ 0.30.
+- `bridgeGaps: 0.06` (orange pass only): `bridgeMaskGaps()` fills gaps of
+  ≤ 6 % of the width along rows and ≤ 6 % of the height along columns.
+  This joins a rail cut by tape without closing the opening, which is far
+  wider.
+- Pass order: mint → yellow → yellowBright → orange → cyan → white.
+  - Orange is a fallback like cyan: it is skipped when an earlier pass
+    already reached 0.8.
+  - It counts only at confidence ≥ 0.7, the same gate as yellowBright.
+  - It also needs `railSupport()` ≥ `orangeRailMin` (0.25). This is the
+    in-band fraction just outside each side (1-8 % of the side), worst
+    side. Measured 0.33-0.44 on the orange rig, against 0.06-0.14 when a
+    yellow rig on rust-brown rock closes an orange quad. Without this check
+    two Punta Loma photos got a confident quad sitting on the tube.
+- The confidence gate now drops only *successful* weak passes. Failed ones
+  stay in the list for diagnostics, so a pinned single pass never returns
+  null.
+
+**Tested** (node on `js/qd.js` + the real UI with the CR2 files):
+- 3 orange-rig CR2 photos: conf 0.83 / 0.87 / 0.89, inner edges of the
+  opening.
+- 265 other photos all give the same quad as before, with 0 changes:
+  - Punta Loma (146), frameless subtidal (86), Cabo Dos Bahías, Azores
+    and the 11 full-resolution Punta Loma photos;
+  - `tests/run.js` 16/16.
 

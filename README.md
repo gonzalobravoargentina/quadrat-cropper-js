@@ -1,7 +1,7 @@
 # Quadrat Cropper (JS)
 
 Browser-based tool that automatically crops photoquadrat images to the square
-interior area framed by the PVC quadrat (mint-green or yellow, 25 × 25 cm;
+interior area framed by the PVC quadrat (mint-green, yellow or orange, 25 × 25 cm;
 the mint tube is also found when the camera renders it turquoise/cyan, as the
 Olympus/OM TG-6/TG-7 does). Supports
 individual files, drag & drop batches, and Google Drive (Picker or a pasted
@@ -275,7 +275,10 @@ Node validation harness:
 2. Run the pipeline once per known tube color (`FRAME_COLORS`): an HSV mask
    band for mint PVC (hue 118–172°, sat ≥ 0.13) and for yellow PVC (hue 42–82°,
    sat ≥ 0.2; kept band-separate so green algae never pollutes a yellow pass
-   and pale sand a mint one). The best-confidence detection wins.
+   and pale sand a mint one). Fallback passes: bright yellow (yellow rig on
+   green algae), orange (orange rig with black tape bands — short gaps along
+   rows/columns are bridged, and the rails just outside the quad must be
+   orange), cyan and white. The best-confidence detection wins.
 3. Flood the mask through bright, weakly-tinted "highlight" pixels (direct-sun
    shots blow the PVC out to near-white; the fill is bounded by masked rims).
 4. Cast 128 rays from the frame middle. The protocol centers the quadrat in
